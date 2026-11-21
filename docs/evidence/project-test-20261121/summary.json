@@ -1,0 +1,69 @@
+{
+  "schema": "project-test-delivery-evidence.v1",
+  "project": "hermanwangd/swarm-test-module",
+  "pr": 1,
+  "project_revision": "8d2e9447d6dd8a736dfdf109efd18f3834fcbe16",
+  "workflow_source_revision": "373645c6ab5a53cc079083feb87cc9e97e2b0f74",
+  "host_skill_import_revision": "4491542e6f7eb95a464ffd554560dc446dbe75fa",
+  "author": "codex:/root",
+  "reviewer": "codex:/root/shipping_review",
+  "scope": "Three agent-authored native CLI cases covering the two scoped CLI AC; BDD/AC restate existing README/entry behavior. Not general project or business acceptance.",
+  "native_engcim_adoption": "NOT_VERIFIED",
+  "sit": "NOT_VERIFIED",
+  "cross_rp": "NOT_VERIFIED",
+  "release_eligible": false,
+  "runs": [
+    {
+      "name": "acceptance",
+      "report_sha256": "542ea2fd04f3db1a46e112c237ec4726787b38561e54c7118ae79b4ab175cf0a",
+      "design_sha256": "204b3be5db28248a2239f721acd68c7926ae28c4f1c35e99700527f0f96d223c",
+      "review_sha256": "32cf8312dd6a7aaca667912f2297a3d1f607d998aea4aa4510bbc129c15b9795",
+      "status": "PASS",
+      "cases": [
+        {
+          "id": "TC-CLI-EMPTY",
+          "status": "PASS",
+          "framework_verdict": "passed",
+          "receipt_sha256": "8220385eb7ef0aca150bab96e461ec240d4f4e8c296faea414cccf7525065a50",
+          "result_sha256": "33b8ec7b37f6caca6860309472c7c196b335b13ff5cf5a949f878a08bce20e7a",
+          "native_provider_sha256": "ff524ea27b1068de005622aaaa61e51c4758b969da99e24826867b2a8923390a"
+        },
+        {
+          "id": "TC-CLI-EXTRA",
+          "status": "PASS",
+          "framework_verdict": "passed",
+          "receipt_sha256": "e2eb81c813a5e860b0a4b49f160d49c7623ee22ad10acb4828c8da0a9bd310d1",
+          "result_sha256": "0ce48791eea53951da2a5f857a21ecf2ead39d62a8d4f8c451073a2f2993f024",
+          "native_provider_sha256": "6feab5c972d90ca1ac64912eba3424c1af72fb68f4b12ae25c20bb3292386365"
+        },
+        {
+          "id": "TC-CLI-NO-BINDING",
+          "status": "PASS",
+          "framework_verdict": "passed",
+          "receipt_sha256": "ffb03550eee132c9a714d8381d5677b6a2d7c24314270b6cf46003bbda2f3d28",
+          "result_sha256": "00f71989f76f9068b4d01a7bbed1fe5650d83f9580e7594fb92380c6f579d110",
+          "native_provider_sha256": "e0b9d9be5838a18201685f24a145e3646219400530c07c55987af66786fc142a"
+        }
+      ],
+      "count_as_product_acceptance": true
+    },
+    {
+      "name": "wrong-oracle-control",
+      "report_sha256": "d7235fa3d1e68ac9258131c314086863101952f7c0fd07d17ebaf476975edfef",
+      "design_sha256": "ba48cfdc1480069f4fa4badff5b2271cd81a398b7fcaaafa13b48393a92eef2f",
+      "review_sha256": "5afea420e4a0f1e98a8dbbfe92715004d8537c498537f9e90d442295c3a197b3",
+      "status": "INCOMPLETE",
+      "cases": [
+        {
+          "id": "TC-CLI-EMPTY",
+          "status": "FAIL",
+          "framework_verdict": "failed",
+          "receipt_sha256": "7f724d50f6138bb58467485e05f8056fc428cc7479b1d317dd00066c1bdfe08f",
+          "result_sha256": "3f6bdeb8a5fd8a61aeed63eee180b30c8e2aaf0b413249013b21663a5f51e1a8",
+          "native_provider_sha256": "35a62303b8aa3415005e1d37f152a21a51aaf9815c11e1540008f8352e6ae4b8"
+        }
+      ],
+      "count_as_product_acceptance": false
+    }
+  ]
+}

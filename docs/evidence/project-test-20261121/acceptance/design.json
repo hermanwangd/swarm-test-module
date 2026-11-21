@@ -1,0 +1,148 @@
+{
+  "schema": "project-test-design.v1",
+  "author": "codex:/root",
+  "context_sha256": "37676a9c132e65560437fdc0318f6730754b091c3bc9c6d56b4221ccb48f946a",
+  "requirements": [
+    {
+      "id": "AC-CLI-1",
+      "citations": [
+        {
+          "source": "ac:docs/CLI-AC.md",
+          "start": 7,
+          "end": 9
+        }
+      ],
+      "gap": null
+    },
+    {
+      "id": "AC-CLI-2",
+      "citations": [
+        {
+          "source": "ac:docs/CLI-AC.md",
+          "start": 10,
+          "end": 12
+        }
+      ],
+      "gap": null
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-CLI-EMPTY",
+      "requirements": [
+        "AC-CLI-1"
+      ],
+      "technique": "boundary",
+      "rationale": "Zero arguments is the lower invalid arity boundary",
+      "preconditions": [
+        "Published 1.0.0 CLI has the independently verified release SHA-256",
+        "Native provider clears inherited environment"
+      ],
+      "steps": [
+        "Execute the pinned JDK with the published CLI JAR and literal args: []"
+      ],
+      "expected": "exit_code = 2; stdout empty; stderr = 'product-test: usage: product-test run --request <request.json>\\n'",
+      "citations": [
+        {
+          "source": "bdd:docs/cli-entry.feature",
+          "start": 4,
+          "end": 7
+        },
+        {
+          "source": "pr:snapshot",
+          "start": 2,
+          "end": 4
+        },
+        {
+          "source": "code:src/main/java/com/featuredeliveryintelligence/fdi/producttest/ProductTestCli.java",
+          "start": 24,
+          "end": 25
+        }
+      ],
+      "suite": "suites/TC-CLI-EMPTY",
+      "test_case_id": "TC-CLI-EMPTY"
+    },
+    {
+      "id": "TC-CLI-EXTRA",
+      "requirements": [
+        "AC-CLI-1"
+      ],
+      "technique": "boundary",
+      "rationale": "Five command arguments exceeds the exact four-argument grammar",
+      "preconditions": [
+        "Published 1.0.0 CLI has the independently verified release SHA-256",
+        "Native provider clears inherited environment"
+      ],
+      "steps": [
+        "Execute the pinned JDK with the published CLI JAR and literal args: ['product-test', 'run', '--request', '/nonexistent-project-test-request', 'extra']"
+      ],
+      "expected": "exit_code = 2; stdout empty; stderr = 'product-test: usage: product-test run --request <request.json>\\n'",
+      "citations": [
+        {
+          "source": "bdd:docs/cli-entry.feature",
+          "start": 9,
+          "end": 12
+        },
+        {
+          "source": "pr:snapshot",
+          "start": 2,
+          "end": 4
+        },
+        {
+          "source": "code:src/main/java/com/featuredeliveryintelligence/fdi/producttest/ProductTestCli.java",
+          "start": 24,
+          "end": 26
+        }
+      ],
+      "suite": "suites/TC-CLI-EXTRA",
+      "test_case_id": "TC-CLI-EXTRA"
+    },
+    {
+      "id": "TC-CLI-NO-BINDING",
+      "requirements": [
+        "AC-CLI-2"
+      ],
+      "technique": "scenario",
+      "rationale": "A readable request must still require deployment configuration",
+      "preconditions": [
+        "Published 1.0.0 CLI has the independently verified release SHA-256",
+        "Native provider clears inherited environment"
+      ],
+      "steps": [
+        "Execute the pinned JDK with the published CLI JAR and literal args: ['product-test', 'run', '--request', '/workspace/ship-evidence/project-workflow/request-input.json']"
+      ],
+      "expected": "exit_code = 2; stdout empty; stderr = 'product-test: Missing deployment binding: SWARM_PRODUCT_TEST_FRAMEWORK_JAR\\n'",
+      "citations": [
+        {
+          "source": "bdd:docs/cli-entry.feature",
+          "start": 14,
+          "end": 19
+        },
+        {
+          "source": "pr:snapshot",
+          "start": 2,
+          "end": 4
+        },
+        {
+          "source": "code:src/main/java/com/featuredeliveryintelligence/fdi/producttest/ProductTestCli.java",
+          "start": 26,
+          "end": 38
+        }
+      ],
+      "suite": "suites/TC-CLI-NO-BINDING",
+      "test_case_id": "TC-CLI-NO-BINDING"
+    }
+  ],
+  "scope_note": "Published CLI packaging and invocation slice, two existing AC restated from README/source. Not business/SIT/whole-product coverage.",
+  "technique_notes": {
+    "equivalence": "No command vs syntactically valid unbound request are distinct classes",
+    "state": "No persistent state transition in this slice",
+    "regression": "All cases target the published standalone entry added to PR1 distribution checks"
+  },
+  "sut_provenance": {
+    "source_commit": "f7369f5ab872f13c6003aa448f2667c147076c7b",
+    "publication_run": 44872441893,
+    "source_equivalence": "src/main/java and pom.xml have zero diff to the frozen project context revision",
+    "jar_sha256": "3d8e46807562bc44c11be9d6ff061d6a9dbe8ed30d77c8ad46810ffd33e04ae3"
+  }
+}
