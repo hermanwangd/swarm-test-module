@@ -388,6 +388,13 @@ def main():
             project_options = [args.pytest_repo, args.pytest_python, args.pytest_source]
             require(not any(project_options) or all(project_options), "provide pytest repo, python and source together")
             require(not args.include_stress or all(project_options), "stress selection requires a pytest checkout")
+            if all(project_options):
+                require(sha(args.review) == args.review_sha256, "regression review pin mismatch")
+                binding = {"repo": str(args.pytest_repo.resolve()), "python": str(args.pytest_python.absolute()),
+                           "python_sha256": sha(args.pytest_python.resolve(strict=True)), "source": args.pytest_source,
+                           "revision": git(args.pytest_repo, "rev-parse", "HEAD").decode().strip(),
+                           "include_stress": args.include_stress}
+                require(read(args.review).get("pytest_regression") == binding, "regression settings differ from review")
             result = run(args.context.absolute(), args.design.absolute(), args.review.absolute(), args.review_sha256, args.out.absolute())
             if all(project_options):
                 return pytest_regression(argparse.Namespace(
