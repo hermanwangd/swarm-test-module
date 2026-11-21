@@ -20,3 +20,13 @@ the exact revision's src tree, containing only click/. The probe imports from
 that archive under isolated Python and checks the actual module location.
 Coverage is local to the two selected behaviors. Automatic environment prefixes
 and the complete upstream regression suite are outside this run.
+
+The subsequent [combined module run](upstream-regression/report.json) ran both
+authored cases and upstream pytest on Linux / CPython 3.12.14. The production
+line coverage was 4207/4857 and branch coverage was 1350/1680. All six upstream
+empty-environment help cases passed, including three automatic-prefix cases.
+The separately reported 2/2 AC count still describes the original authored
+cases. The regression stage ran the upstream default selection, with 2111
+passes, 24 platform skips and one expected failure. Upstream excludes 31000
+stress iterations by default. See the [scope details](upstream-regression/scope.json),
+[pytest log](upstream-regression/pytest.log) and [coverage data](upstream-regression/coverage.json).

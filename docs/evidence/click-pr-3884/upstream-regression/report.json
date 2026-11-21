@@ -1,0 +1,73 @@
+{
+  "schema": "project-regression-report.v1",
+  "revision": "c53d3732b98c764932e146c007146ad402acb229",
+  "ac_report_sha256": "91f27b861a7486df608bf9d9c631547d1c2818e49b115a438c74c46dcc0bdc0c",
+  "ac_status": "PASS",
+  "command": [
+    "/workspace/external-validation/coverage-head/.venv/bin/python",
+    "-m",
+    "coverage",
+    "run",
+    "--branch",
+    "--source=src/click",
+    "-m",
+    "pytest",
+    "-q",
+    "-ra",
+    "--junitxml=/workspace/external-validation/combined/regression/junit.xml"
+  ],
+  "pytest_exit_code": 0,
+  "source": "src/click",
+  "status": "PASS",
+  "lines": {
+    "covered": 4207,
+    "total": 4857
+  },
+  "branches": {
+    "covered": 1350,
+    "total": 1680
+  },
+  "tests": {
+    "tests": 2136,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 25
+  },
+  "requirements": [
+    {
+      "requirement": "AC-sequence",
+      "status": "PASS",
+      "cases": [
+        "CLICK-sequence"
+      ],
+      "gap": null,
+      "citations": [
+        {
+          "source": "ac:CHANGES.md",
+          "start": 27,
+          "end": 28
+        }
+      ]
+    },
+    {
+      "requirement": "AC-empty",
+      "status": "PASS",
+      "cases": [
+        "CLICK-empty"
+      ],
+      "gap": null,
+      "citations": [
+        {
+          "source": "ac:CHANGES.md",
+          "start": 29,
+          "end": 31
+        }
+      ]
+    }
+  ],
+  "evidence_sha256": {
+    "coverage.json": "b22221242891f6ab46394c7efe498a237a4a8bc3c5fb358500b9be3168d2ea77",
+    "junit.xml": "ab896bbf5769b3c3eea0d6c3f8d5559e922f8f2702fdb43aaec848996bf9f1e0",
+    "pytest.log": "55079ccd6e570e0f53945390d21fea78b18bb39f1890e89e8c35456577c3e039"
+  }
+}
