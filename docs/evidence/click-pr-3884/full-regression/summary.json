@@ -1,0 +1,21 @@
+{
+  "source_revision": "c53d3732b98c764932e146c007146ad402acb229",
+  "route": "Direct upstream pytest with coverage.py, including stress",
+  "total": 33136,
+  "stress_passed": 31000,
+  "stress_groups": {
+    "test_stress_thread_pool_with_exit": 10000,
+    "test_stress_logging_sequential_invocations": 10000,
+    "test_stress_gc_between_invocations": 10000,
+    "test_stress_echo_via_pager_exception_cleanup": 1000
+  },
+  "lines": [
+    4207,
+    4857
+  ],
+  "branches": [
+    1350,
+    1680
+  ],
+  "pytest_summary": "33111 passed, 24 skipped, 1 xfailed in 3709.64s (1:01:49)"
+}

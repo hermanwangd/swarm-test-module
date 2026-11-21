@@ -30,3 +30,9 @@ cases. The regression stage ran the upstream default selection, with 2111
 passes, 24 platform skips and one expected failure. Upstream excludes 31000
 stress iterations by default. See the [scope details](upstream-regression/scope.json),
 [pytest log](upstream-regression/pytest.log) and [coverage data](upstream-regression/coverage.json).
+
+The [full upstream run including stress](full-regression/summary.json) has
+finished. All 31,000 stress cases passed. The complete run recorded 33,111
+passes, 24 Windows-only skips and one expected failure on Linux. This
+supplemental run used upstream pytest directly; the module's combined run
+above used the project's default regression selection.
