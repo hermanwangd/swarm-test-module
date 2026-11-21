@@ -1,5 +1,13 @@
 # Swarm product testing module
 
+To **read a project's BDD, AC, PR and code, design test cases and execute them**,
+install the [project-test agent skill](skills/project-test/SKILL.md). It directs
+the host's QA agent to author source-backed cases, obtains independent review,
+and executes through this module and the existing Framework. The resulting
+report maps every inventoried AC to PASS, FAIL, BLOCKED or UNTESTED.
+The Maven JAR by itself is the execution component; it does not contain an AI
+test designer. See [workflow formats](skills/project-test/references/formats.md).
+
 > **Standalone extraction:** This branch contains only the existing Swarm Product Test module, extracted from `integrations/swarm-product-test/` on the framework's `plug-in-module` branch. The production Java classes are carried forward unchanged. See [extraction provenance](EXTRACTION-PROVENANCE.md) and [company Swarm import](docs/COMPANY-SWARM-IMPORT.md).
 > Build with `mvn -B -ntp verify`; run a clean downstream import smoke with `mvn -B -ntp -DskipTests install && mvn -B -ntp -f examples/company-swarm-consumer/pom.xml test`. This is **not** evidence of real SIT/E2E acceptance.
 

@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+"""Agent workflow support. The agent designs tests; the existing Framework executes them.
+
+No model, assertion engine, provider, or authorization service is implemented here.
+Review pins must come from the host's independent reviewer, never from the QA output.
+"""
+import argparse
+import hashlib
+import json
+from pathlib import Path, PurePosixPath
+import re
+import stat
+import subprocess
+import sys
+
+LIMIT = 2 * 1024 * 1024
+
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
+def regular(path):
+    path = Path(path).absolute()
+    require(not any(p.is_symlink() for p in [path, *path.parents]), "symlink is not an evidence source")
+    require(stat.S_ISREG(path.stat().st_mode), "expected a regular file")
+    return path
+
+
+def content(path):
+    path = regular(path)
+    require(path.stat().st_size <= LIMIT, "source exceeds 2 MiB")
+    with path.open("rb") as stream:
+        data = stream.read(LIMIT + 1)
+    require(len(data) <= LIMIT, "source exceeds 2 MiB")
+    return data
+
+
+def sha(path):
+    with regular(path).open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def read(path):
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            require(key not in value, "duplicate JSON key")
+            value[key] = item
+        return value
+    return json.loads(content(path).decode("utf-8"), object_pairs_hook=unique)
+
+
+def write(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def relative(value):
+    require(isinstance(value, str) and value and "\\" not in value and "\x00" not in value,
+            "invalid relative path")
+    path = PurePosixPath(value)
+    require(not path.is_absolute() and all(p not in (".", "..") for p in value.split("/")), "unsafe relative path")
+    return value
+
+
+def contained(root, value):
+    path = Path(root) / relative(value)
+    require(path.resolve().is_relative_to(Path(root).resolve()), "path escapes workflow root")
+    require(not any(p.is_symlink() for p in [path, *path.parents]), "symlink is not a workflow input")
+    return path
+
+
+def git(repo, *args):
+    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, timeout=30)
+    require(result.returncode == 0, "cannot read pinned Git source")
+    require(len(result.stdout) <= LIMIT, "Git source exceeds 2 MiB")
+    return result.stdout
+
+
+def collect(repo, revision, base, sources, output, pr_snapshot=None):
+    require(re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", revision) is not None, "revision must be an exact commit")
+    require(re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", base) is not None, "base must be an exact commit")
+    for commit in [revision, base]:
+        require(git(repo, "rev-parse", commit + "^{commit}").decode().strip() == commit, "commit mismatch")
+    for kind in ["bdd", "ac", "pr", "code"]:
+        require(sources.get(kind) or (kind == "pr" and pr_snapshot), "missing " + kind + " source")
+    require(sum(len(v) for v in sources.values()) <= 128, "too many sources; split the scope")
+    require(not output.exists(), "context output must be fresh")
+    records, payloads = [], []
+    def add(identity, kind, data, origin):
+        require(data and len(data) <= LIMIT, "empty or oversized source")
+        lines = data.decode("utf-8").splitlines()
+        require(identity not in {x["id"] for x in records}, "duplicate source")
+        snapshot = "sources/" + str(len(records)) + ".txt"
+        records.append({"id": identity, "kind": kind, "origin": origin, "snapshot": snapshot,
+                        "sha256": hashlib.sha256(data).hexdigest(), "lines": len(lines)})
+        payloads.append((snapshot, data))
+    for kind, paths in sources.items():
+        require(kind in {"bdd", "ac", "pr", "code"}, "unknown source kind")
+        for name in paths:
+            relative(name)
+            entry = git(repo, "ls-tree", "-z", revision, "--", name).decode().split("\t", 1)
+            require(len(entry) == 2 and entry[0].split()[0] in {"100644", "100755"}
+                    and entry[1] == name + "\x00", "source must be one committed regular file")
+            add(kind + ":" + name, kind, git(repo, "show", revision + ":" + name), revision + ":" + name)
+    if pr_snapshot:
+        pr = read(pr_snapshot)
+        require(pr["head"] == revision and pr["base"] == base, "PR snapshot does not match source commits")
+        require(pr.get("url") and pr.get("title") and isinstance(pr.get("body"), str), "incomplete PR snapshot")
+        add("pr:snapshot", "pr", content(pr_snapshot), pr["url"])
+    diff = git(repo, "diff", "--no-ext-diff", "--no-textconv", "--unified=3", base, revision, "--")
+    if diff:
+        add("pr:diff", "pr", diff, base + ".." + revision)
+    require(sum(len(p) for _, p in payloads) <= 16 * LIMIT, "context exceeds 32 MiB; split the scope")
+    output.mkdir(parents=True, mode=0o700)
+    for name, data in payloads:
+        path = output / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(data)
+    context = {"schema": "project-test-context.v1", "revision": revision, "base": base, "sources": records}
+    write(output / "context.json", context)
+    return context
+
+
+def check(context_dir, design_path):
+    context, design = read(context_dir / "context.json"), read(design_path)
+    require(context["schema"] == "project-test-context.v1" and design["schema"] == "project-test-design.v1",
+            "unsupported workflow schema")
+    require(design["context_sha256"] == sha(context_dir / "context.json"), "design uses another context")
+    sources = {s["id"]: s for s in context["sources"]}
+    require(len(sources) == len(context["sources"]), "duplicate context source")
+    for source in sources.values():
+        path = contained(context_dir, source["snapshot"])
+        require(sha(path) == source["sha256"], "source snapshot changed")
+        require(len(content(path).decode("utf-8").splitlines()) == source["lines"], "source line count changed")
+    def citations(items):
+        require(isinstance(items, list) and 0 < len(items) <= 128, "missing citations")
+        kinds = set()
+        for item in items:
+            require(item["source"] in sources, "unknown citation source")
+            source = sources[item["source"]]
+            require(type(item["start"]) is int and type(item["end"]) is int
+                    and 1 <= item["start"] <= item["end"] <= source["lines"], "citation line range invalid")
+            kinds.add(source["kind"])
+        return kinds
+    require(isinstance(design.get("author"), str) and design["author"].strip(), "missing design author")
+    requirements = design["requirements"]
+    require(0 < len(requirements) <= 512, "requirements inventory is required")
+    ids = [r["id"] for r in requirements]
+    require(all(isinstance(x, str) and x.strip() for x in ids) and len(ids) == len(set(ids)), "invalid requirement IDs")
+    for requirement in requirements:
+        require("ac" in citations(requirement["citations"]), "requirement must cite AC")
+    cases, covered, case_ids, suites = design["cases"], set(), set(), set()
+    require(len(cases) <= 512, "too many cases")
+    for case in cases:
+        require(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", case["id"]) is not None, "invalid case ID")
+        require(case["id"] not in case_ids and case["suite"] not in suites, "duplicate case or suite")
+        case_ids.add(case["id"])
+        suites.add(relative(case["suite"]))
+        require(case["requirements"] and set(case["requirements"]) <= set(ids), "case has unknown requirement")
+        covered.update(case["requirements"])
+        require({"bdd", "pr", "code"} <= citations(case["citations"]), "case must cite bdd, pr and code")
+        require(case["technique"] in {"equivalence", "boundary", "state", "scenario", "regression"}, "unknown technique")
+        for key in ["rationale", "expected", "test_case_id"]:
+            require(isinstance(case.get(key), str) and case[key].strip(), "case missing " + key)
+        for key in ["preconditions", "steps"]:
+            require(isinstance(case.get(key), list) and case[key] and all(isinstance(x, str) and x.strip()
+                    for x in case[key]), "case missing " + key)
+    for requirement in requirements:
+        if requirement["id"] not in covered:
+            require(isinstance(requirement.get("gap"), str) and requirement["gap"].strip(),
+                    requirement["id"] + " uncovered without an explanation")
+    return context, design
+
+
+def coverage(design, results):
+    statuses = {r["id"]: r["status"] for r in results}
+    rows = []
+    for requirement in design["requirements"]:
+        cases = [c["id"] for c in design["cases"] if requirement["id"] in c["requirements"]]
+        observed = [statuses.get(c, "BLOCKED") for c in cases]
+        status = "UNTESTED" if not cases else "FAIL" if "FAIL" in observed else "BLOCKED" if any(
+            s != "PASS" for s in observed) else "PASS"
+        rows.append({"requirement": requirement["id"], "status": status, "cases": cases,
+                     "gap": requirement.get("gap"), "citations": requirement["citations"]})
+    return rows
+
+
+def run(context_dir, design_path, review_path, review_pin, output):
+    require(sha(review_path) == review_pin, "review does not match independent pin")
+    context, design = check(context_dir, design_path)
+    review = read(review_path)
+    require(review.get("status") == "approved" and review.get("reviewer") and review.get("review_ref")
+            and review["reviewer"] != design["author"], "independent design review required")
+    require(review["context_sha256"] == sha(context_dir / "context.json")
+            and review["design_sha256"] == sha(design_path), "review does not match context/design")
+    runtime = review["runtime"]
+    require(isinstance(review.get("subjects"), list) and review["subjects"], "review must pin the SUT subjects")
+    def stable_inputs():
+        for kind in ["java", "module", "framework"]:
+            require(Path(runtime[kind]["path"]).is_absolute(), "runtime requires absolute paths")
+            require(sha(runtime[kind]["path"]) == runtime[kind]["sha256"], kind + " binary changed")
+        for subject in review["subjects"]:
+            require(Path(subject["path"]).is_absolute(), "SUT requires absolute paths")
+            require(sha(subject["path"]) == subject["sha256"], "SUT subject changed")
+        require(sha(review_path) == review_pin and sha(design_path) == review["design_sha256"], "review/design changed")
+        check(context_dir, design_path)
+    stable_inputs()
+    require(set(review["handoffs"]) == {c["id"] for c in design["cases"]}, "incomplete reviewed handoff set")
+    require(design["cases"], "no runnable cases; inspect requirement gaps")
+    prepared = []
+    for case in design["cases"]:
+        suite = contained(design_path.parent, case["suite"]).resolve(strict=True)
+        handoff_path = contained(suite, "handoff/reviewed-tests.json")
+        pin = review["handoffs"][case["id"]]
+        require(sha(handoff_path) == pin, "reviewed handoff changed")
+        handoff = read(handoff_path)
+        require(handoff["reviewed_by"] == review["reviewer"] and handoff["review_ref"] == review["review_ref"],
+                "handoff uses another reviewer")
+        require(handoff["knowledge_mode"] == "not_used", "this local workflow requires directly supplied project sources")
+        require(list(handoff["repository_revisions"].values()) == [context["revision"]], "suite targets another revision")
+        mappings = handoff["requirement_mapping"]
+        require(len(mappings) == len(case["requirements"]) and
+                {m["requirement_ref"] for m in mappings} == set(case["requirements"]) and
+                all(m["test_case_ids"] == [case["test_case_id"]] for m in mappings), "suite AC/case mapping differs from design")
+        # JSON is valid YAML. The agent writes the existing Framework v0.3 DSL, not a new DSL.
+        manifest = read(contained(suite, "suite_manifest.yaml"))
+        require(manifest["suite_id"] == handoff["suite_id"] and len(manifest["tests"]) == 1, "suite identity or test count differs")
+        test = read(contained(suite, manifest["tests"][0]["ref"]))
+        require(test["test_case_id"] == case["test_case_id"], "test case identity differs")
+        profile_ref = manifest["env_profiles"][handoff["profile"]]["ref"]
+        profile = read(contained(suite, profile_ref))["product_test"]
+        require(profile["environment_stage"] == "local", "SIT/preprod/live are unsupported")
+        prepared.append((case, suite, handoff, pin, profile))
+    require(not output.exists(), "run output must be fresh; preserve earlier results")
+    output.mkdir(parents=True, mode=0o700)
+    results = []
+    for case, suite, handoff, pin, profile in prepared:
+        work = output / case["id"]
+        work.mkdir(mode=0o700)
+        (work / "outputs").mkdir(mode=0o700)
+        request = {"contract_version": "product-test-request.v1", "module_id": "product-test", "module_version": "1",
+                   "mission_ref": "project-test:" + review_pin, "request_ref": case["id"], "execution_revision": context["revision"],
+                   "workspace_ref": handoff["workspace_ref"], "project_ref": handoff["project_ref"],
+                   "repository_revisions": handoff["repository_revisions"],
+                   "requirement_test_mapping": {m["requirement_ref"]: m["test_case_ids"] for m in handoff["requirement_mapping"]},
+                   "test_level": profile["test_level"], "test_type": profile["test_type"], "environment_stage": "local",
+                   "knowledge_mode": "not_used", "artifact_root": str(suite), "suite_manifest": str(suite / "suite_manifest.yaml"),
+                   "suite_id": handoff["suite_id"], "profile": handoff["profile"],
+                   "reviewed_handoff": str(suite / "handoff/reviewed-tests.json"), "expected_handoff_sha256": pin}
+        write(work / "request.json", request)
+        environment = {"SWARM_PRODUCT_TEST_FRAMEWORK_JAR": runtime["framework"]["path"],
+                       "SWARM_PRODUCT_TEST_FRAMEWORK_SHA256": runtime["framework"]["sha256"],
+                       "SWARM_PRODUCT_TEST_HANDOFF_SHA256": pin, "SWARM_PRODUCT_TEST_ARTIFACT_ROOT": str(suite),
+                       "SWARM_PRODUCT_TEST_OUTPUT_ROOT": str(work / "outputs"), "SWARM_PRODUCT_TEST_TIMEOUT_MS": "60000"}
+        command = [runtime["java"]["path"], "-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-jar", runtime["module"]["path"],
+                   "product-test", "run", "--request", str(work / "request.json")]
+        record = {"id": case["id"], "status": "BLOCKED", "command": command, "expected": case["expected"]}
+        try:
+            stable_inputs()
+            with (work / "receipt.json").open("wb") as out, (work / "stderr.log").open("wb") as err:
+                completed = subprocess.run(command, env=environment, cwd=work, stdout=out, stderr=err, timeout=75)
+            stable_inputs()
+            receipt = read(work / "receipt.json")
+            record.update(exit_code=completed.returncode, outcome=receipt["outcome"], verdict=receipt["framework_verdict"],
+                          receipt=str(work / "receipt.json"), receipt_sha256=sha(work / "receipt.json"))
+            require(receipt["request"] == request, "receipt belongs to another request")
+            require(receipt["outcome"] == "COMPLETED" and receipt["evidence_validation"] == "validated", "no validated execution")
+            require(receipt["release_evidence_eligible"] is False and
+                    receipt["evidence_classification"] == "framework_verification_only", "invalid local evidence boundary")
+            require(receipt["artifacts"].get("result"), "missing canonical result")
+            for artifact in receipt["artifacts"].values():
+                path = regular(artifact["path"])
+                require(path.resolve().is_relative_to((work / "outputs").resolve()), "evidence outside this invocation")
+                require(sha(path) == artifact["sha256"], "evidence digest mismatch")
+            if receipt["framework_verdict"] == "passed" and completed.returncode == 0:
+                record["status"] = "PASS"
+            elif receipt["framework_verdict"] == "failed" and completed.returncode == 1:
+                record["status"] = "FAIL"
+            record["result"] = receipt["artifacts"]["result"]
+        except (ValueError, OSError, KeyError, subprocess.TimeoutExpired) as error:
+            record["reason"] = str(error)
+        results.append(record)
+        # Keep completed case evidence even if a later invocation is interrupted.
+        write(output / "progress.json", results)
+    rows = coverage(design, results)
+    report = {"schema": "project-test-report.v1", "revision": context["revision"], "review_sha256": review_pin,
+              "claim": "AGENT_AUTHORED_LOCAL_FRAMEWORK_EXECUTION", "release_eligible": False,
+              "cases": results, "requirements": rows, "status": "PASS" if all(r["status"] == "PASS" for r in rows) else "INCOMPLETE",
+              "coverage_note": "Coverage of the reviewed AC inventory; not code coverage or proof that the inventory is exhaustive."}
+    write(output / "report.json", report)
+    return report
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    acquire = commands.add_parser("collect")
+    acquire.add_argument("--repo", type=Path, required=True)
+    for name in ["revision", "base"]:
+        acquire.add_argument("--" + name, required=True)
+    for name in ["bdd", "ac", "pr", "code"]:
+        acquire.add_argument("--" + name, action="append", default=[])
+    acquire.add_argument("--pr-snapshot", type=Path)
+    acquire.add_argument("--out", type=Path, required=True)
+    for name in ["check", "run"]:
+        command = commands.add_parser(name)
+        command.add_argument("--context", type=Path, required=True)
+        command.add_argument("--design", type=Path, required=True)
+        if name == "run":
+            command.add_argument("--review", type=Path, required=True)
+            command.add_argument("--review-sha256", required=True)
+            command.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args()
+    try:
+        if args.command == "collect":
+            collect(args.repo, args.revision, args.base, {kind: getattr(args, kind) for kind in ["bdd", "ac", "pr", "code"]},
+                    args.out.absolute(), args.pr_snapshot)
+            print(json.dumps({"context": str(args.out / "context.json"), "sha256": sha(args.out / "context.json")}))
+        elif args.command == "check":
+            _, design = check(args.context, args.design)
+            print(json.dumps({"status": "DESIGNED_NOT_EXECUTED", "cases": len(design["cases"]),
+                              "requirements": coverage(design, [])}))
+        else:
+            result = run(args.context.absolute(), args.design.absolute(), args.review.absolute(), args.review_sha256, args.out.absolute())
+            print(json.dumps(result, ensure_ascii=False))
+            return 0 if result["status"] == "PASS" else 1
+        return 0
+    except (ValueError, OSError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+        print(json.dumps({"status": "BLOCKED", "reason": str(error)}), file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
