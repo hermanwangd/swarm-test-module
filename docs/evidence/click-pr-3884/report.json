@@ -1,0 +1,93 @@
+{
+  "schema": "project-test-report.v1",
+  "revision": "c53d3732b98c764932e146c007146ad402acb229",
+  "review_sha256": "dc96af2960715a0c89581f17498e5651babd97813d6c710d88218257679ad28c",
+  "claim": "AGENT_AUTHORED_LOCAL_FRAMEWORK_EXECUTION",
+  "release_eligible": false,
+  "cases": [
+    {
+      "id": "CLICK-sequence",
+      "status": "PASS",
+      "command": [
+        "/workspace/.toolchains/temurin-17/bin/java",
+        "-Xmx512m",
+        "-XX:MaxMetaspaceSize=256m",
+        "-jar",
+        "/workspace/published-artifacts/swarm-product-test-1.0.0-cli.jar",
+        "product-test",
+        "run",
+        "--request",
+        "/workspace/external-validation/run/CLICK-sequence/request.json"
+      ],
+      "expected": "2 Error: Missing option '--region' (env var: 'PRIMARY REGION', 'FALLBACK').\n",
+      "exit_code": 0,
+      "outcome": "COMPLETED",
+      "verdict": "passed",
+      "receipt": "/workspace/external-validation/run/CLICK-sequence/receipt.json",
+      "receipt_sha256": "1e30d3f3ec419afc75ee47b56c0cd4b65f51e6cec69028ce919d3b2bef69dd3c",
+      "result": {
+        "path": "/workspace/external-validation/run/CLICK-sequence/outputs/product-test-cbb6826c-5a26-43a3-9367-c9a36e85628e-17083460942257993198/target/regression/CLICK-sequence/BATCH-STANDALONE-20261121114833488-1/RUN-V03-0a88cb89-87cd-49dd-9a42-1abd1aac2d78/result.json",
+        "sha256": "e93d7eb8c5b5ef87a8592204c57be30c3aadd984520e2892c1285de01bab5277"
+      }
+    },
+    {
+      "id": "CLICK-empty",
+      "status": "PASS",
+      "command": [
+        "/workspace/.toolchains/temurin-17/bin/java",
+        "-Xmx512m",
+        "-XX:MaxMetaspaceSize=256m",
+        "-jar",
+        "/workspace/published-artifacts/swarm-product-test-1.0.0-cli.jar",
+        "product-test",
+        "run",
+        "--request",
+        "/workspace/external-validation/run/CLICK-empty/request.json"
+      ],
+      "expected": "2 True\n0 True\n2 True\n0 True\n",
+      "exit_code": 0,
+      "outcome": "COMPLETED",
+      "verdict": "passed",
+      "receipt": "/workspace/external-validation/run/CLICK-empty/receipt.json",
+      "receipt_sha256": "968f07cd6c08f5bf237f1e4a297f04101cbdd4eb57bc95b67fe94e904c2497ab",
+      "result": {
+        "path": "/workspace/external-validation/run/CLICK-empty/outputs/product-test-cd5c91de-f291-4550-82e5-1b4cfc4ba90b-15103425372706467821/target/regression/CLICK-empty/BATCH-STANDALONE-20261121114842654-1/RUN-V03-fbd53462-edb8-4535-a470-c9eef8f63e3d/result.json",
+        "sha256": "febdfd62b1fdfd2c73ecfca0dad3c49232cdce9e13ac4bba65a6a403cc40a9dd"
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "AC-sequence",
+      "status": "PASS",
+      "cases": [
+        "CLICK-sequence"
+      ],
+      "gap": null,
+      "citations": [
+        {
+          "source": "ac:CHANGES.md",
+          "start": 27,
+          "end": 28
+        }
+      ]
+    },
+    {
+      "requirement": "AC-empty",
+      "status": "PASS",
+      "cases": [
+        "CLICK-empty"
+      ],
+      "gap": null,
+      "citations": [
+        {
+          "source": "ac:CHANGES.md",
+          "start": 29,
+          "end": 31
+        }
+      ]
+    }
+  ],
+  "status": "PASS",
+  "coverage_note": "Coverage of the reviewed AC inventory; not code coverage or proof that the inventory is exhaustive."
+}

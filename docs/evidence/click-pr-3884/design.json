@@ -1,0 +1,109 @@
+{
+  "schema": "project-test-design.v1",
+  "author": "codex:/root",
+  "context_sha256": "890df1971e9cd9b2c9027b7428cc9377c8c08b1ab1f7325df814082367d81185",
+  "requirements": [
+    {
+      "id": "AC-sequence",
+      "citations": [
+        {
+          "source": "ac:CHANGES.md",
+          "start": 27,
+          "end": 28
+        }
+      ],
+      "gap": null
+    },
+    {
+      "id": "AC-empty",
+      "citations": [
+        {
+          "source": "ac:CHANGES.md",
+          "start": 29,
+          "end": 31
+        }
+      ],
+      "gap": null
+    }
+  ],
+  "cases": [
+    {
+      "id": "CLICK-sequence",
+      "requirements": [
+        "AC-sequence"
+      ],
+      "technique": "equivalence",
+      "rationale": "Observe user-visible option help and validation as specified in upstream PR",
+      "preconditions": [
+        "Pinned upstream source imported in isolated Python"
+      ],
+      "steps": [
+        "Invoke Click command via public CliRunner with sequence envvar inputs"
+      ],
+      "expected": "2 Error: Missing option '--region' (env var: 'PRIMARY REGION', 'FALLBACK').\n",
+      "citations": [
+        {
+          "source": "bdd:tests/test_options.py",
+          "start": 1038,
+          "end": 1055
+        },
+        {
+          "source": "pr:snapshot",
+          "start": 1,
+          "end": 1
+        },
+        {
+          "source": "code:src/click/core.py",
+          "start": 3271,
+          "end": 3281
+        },
+        {
+          "source": "code:src/click/core.py",
+          "start": 3443,
+          "end": 3460
+        }
+      ],
+      "suite": "suites/CLICK-sequence",
+      "test_case_id": "CLICK-sequence"
+    },
+    {
+      "id": "CLICK-empty",
+      "requirements": [
+        "AC-empty"
+      ],
+      "technique": "equivalence",
+      "rationale": "Observe user-visible option help and validation as specified in upstream PR",
+      "preconditions": [
+        "Pinned upstream source imported in isolated Python"
+      ],
+      "steps": [
+        "Invoke Click command via public CliRunner with empty envvar inputs"
+      ],
+      "expected": "2 True\n0 True\n2 True\n0 True\n",
+      "citations": [
+        {
+          "source": "bdd:tests/test_options.py",
+          "start": 878,
+          "end": 894
+        },
+        {
+          "source": "pr:snapshot",
+          "start": 1,
+          "end": 1
+        },
+        {
+          "source": "code:src/click/core.py",
+          "start": 3271,
+          "end": 3281
+        },
+        {
+          "source": "code:src/click/core.py",
+          "start": 3443,
+          "end": 3460
+        }
+      ],
+      "suite": "suites/CLICK-empty",
+      "test_case_id": "CLICK-empty"
+    }
+  ]
+}

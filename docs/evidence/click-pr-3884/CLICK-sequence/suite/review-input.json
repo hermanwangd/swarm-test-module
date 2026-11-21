@@ -1,0 +1,56 @@
+{
+  "contract_version": "product-test-reviewed-handoff.v1",
+  "knowledge_mode": "not_used",
+  "review_ref": "local-click-3884",
+  "reviewed_by": "codex:/root/shipping_review",
+  "reviewed_at": "2026-11-21T11:46:59.583800Z",
+  "valid_until": "2026-11-21T13:46:59.583800Z",
+  "framework_baseline": "0.3.2",
+  "repository_revisions": {
+    "pallets/click": "c53d3732b98c764932e146c007146ad402acb229"
+  },
+  "swarm_source": {
+    "base_revision": "373645c6ab5a53cc079083feb87cc9e97e2b0f74",
+    "files": {
+      "skills/project-test/SKILL.md": "86ce7c9825688b95aa4f5ee438d03081b0ef7841fbe33e81ea3fde7dc8346bd6",
+      "skills/project-test/scripts/project_test.py": "e5a0472b18c44f9571055de69938335a747a6263d1eaa17b0c65850e3087f230",
+      "skills/project-test/references/formats.md": "8c413be4f999e490f243d0f4875c7d87da7b79082304ae463b3eaaafaa7d252f"
+    }
+  },
+  "reviewed_files": [
+    {
+      "path": "suite_manifest.yaml",
+      "role": "manifest"
+    },
+    {
+      "path": "env_profiles/local_cli.yaml",
+      "role": "profile"
+    },
+    {
+      "path": "test_cases/cli.yaml",
+      "role": "test"
+    }
+  ],
+  "reviewed_contracts": [
+    {
+      "provider_contract": "cli_process.v0.3",
+      "path": "contracts/cli_process_v0_3.yaml"
+    }
+  ],
+  "requirement_mapping": [
+    {
+      "requirement_ref": "AC-sequence",
+      "test_case_ids": [
+        "CLICK-sequence"
+      ],
+      "oracle_refs": [
+        "test_cases/cli.yaml#exit_code_matches",
+        "test_cases/cli.yaml#stdout_matches",
+        "test_cases/cli.yaml#stderr_matches"
+      ],
+      "review_ref": "local-click-3884"
+    }
+  ],
+  "workspace_ref": "codex-local-project-test",
+  "project_ref": "pallets-click-3884"
+}

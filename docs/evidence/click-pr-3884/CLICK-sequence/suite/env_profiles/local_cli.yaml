@@ -1,0 +1,28 @@
+{
+  "profile_id": "local_cli",
+  "execution_mode": "local",
+  "isolation": "per_run",
+  "evidence_classification": "framework_verification_only",
+  "downstream_release_evidence": false,
+  "targets": {
+    "cli": {
+      "runtime_mode": "native",
+      "bindings": {
+        "executable": "/usr/bin/python3.13",
+        "executable_sha256": "17b78e0a93175e86f9ac03141924fd7a7f0c0c52e66b34bfa0de20ffef989df1"
+      }
+    }
+  },
+  "product_test": {
+    "contract_version": "product-test.v1",
+    "test_level": "integration",
+    "test_type": "regression",
+    "environment_stage": "local",
+    "knowledge_mode": "not_used",
+    "provider_modes": {
+      "cli": "real"
+    },
+    "dependency_modes": {},
+    "reviewed_handoff_ref": "handoff/reviewed-tests.json"
+  }
+}

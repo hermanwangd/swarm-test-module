@@ -1,0 +1,54 @@
+{
+  "dsl_version": "v0.3",
+  "test_case_id": "CLICK-empty",
+  "title": "CLICK-empty",
+  "execute": [
+    {
+      "id": "invoke",
+      "target": "cli",
+      "op": "run_command",
+      "with": {
+        "process.argv": [
+          "-I",
+          "-B",
+          "/workspace/external-validation/probe.py",
+          "/workspace/external-validation/c53d3732b98c764932e146c007146ad402acb229.zip",
+          "empty"
+        ],
+        "process.stdin": "",
+        "process.cwd": "work",
+        "process.timeout_ms": 5000,
+        "process.max_output_bytes": 16384
+      }
+    }
+  ],
+  "verify": [
+    {
+      "id": "exit_code_matches",
+      "type": "assertion",
+      "assert": {
+        "actual": "step://invoke/exit_code",
+        "operator": "equals",
+        "expected": 0
+      }
+    },
+    {
+      "id": "stdout_matches",
+      "type": "assertion",
+      "assert": {
+        "actual": "step://invoke/stdout",
+        "operator": "equals",
+        "expected": "2 True\n0 True\n2 True\n0 True\n"
+      }
+    },
+    {
+      "id": "stderr_matches",
+      "type": "assertion",
+      "assert": {
+        "actual": "step://invoke/stderr",
+        "operator": "equals",
+        "expected": ""
+      }
+    }
+  ]
+}

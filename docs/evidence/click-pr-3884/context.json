@@ -1,0 +1,48 @@
+{
+  "schema": "project-test-context.v1",
+  "revision": "c53d3732b98c764932e146c007146ad402acb229",
+  "base": "bb695aaecdef95832d167fc1d508921745aa824e",
+  "diff_base": "bb695aaecdef95832d167fc1d508921745aa824e",
+  "sources": [
+    {
+      "id": "bdd:tests/test_options.py",
+      "kind": "bdd",
+      "origin": "c53d3732b98c764932e146c007146ad402acb229:tests/test_options.py",
+      "snapshot": "sources/0.txt",
+      "sha256": "fd2b86d088d3e5956a1272a5a3e27e5b35bb873c3383fe2fd3b4a77321d75513",
+      "lines": 3691
+    },
+    {
+      "id": "ac:CHANGES.md",
+      "kind": "ac",
+      "origin": "c53d3732b98c764932e146c007146ad402acb229:CHANGES.md",
+      "snapshot": "sources/1.txt",
+      "sha256": "53e97b8fc22a865c4599ebfba33a25f72599e1b05dd05097fea53a15b6a253b5",
+      "lines": 1690
+    },
+    {
+      "id": "code:src/click/core.py",
+      "kind": "code",
+      "origin": "c53d3732b98c764932e146c007146ad402acb229:src/click/core.py",
+      "snapshot": "sources/2.txt",
+      "sha256": "3ae698050f978a5bf7ff018d9cbc2842dac5dcb0946bedcb80cc248a1aee68ba",
+      "lines": 3846
+    },
+    {
+      "id": "pr:snapshot",
+      "kind": "pr",
+      "origin": "https://github.com/pallets/click/pull/3884",
+      "snapshot": "sources/3.txt",
+      "sha256": "38e1bb450a60ddfb0f84dea313cc886001029a6521e9816f7a48865e0a646b7a",
+      "lines": 1
+    },
+    {
+      "id": "pr:diff",
+      "kind": "pr",
+      "origin": "bb695aaecdef95832d167fc1d508921745aa824e..c53d3732b98c764932e146c007146ad402acb229",
+      "snapshot": "sources/4.txt",
+      "sha256": "c1eb087eac45aa1478fc3d4929785e6df31c602581a18a3667b2e4120bb9983c",
+      "lines": 112
+    }
+  ]
+}
