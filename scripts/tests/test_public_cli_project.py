@@ -125,7 +125,7 @@ class PublicCliProjectTest(unittest.TestCase):
                     "module_cli_sha256": "e" * 64, "build": {"binary_sha256": "d" * 64},
                     "asset_lock_sha256": HARNESS.sha(HARNESS.FIXTURES / "asset-lock.json"),
                     "fixtures_sha256": HARNESS.sha(HARNESS.FIXTURES / "cases.json"),
-                    "contract_sha256": HARNESS.sha(HARNESS.REPO / "docs/02-architecture/contracts/provider-contracts/cli_process_v0_3.yaml"),
+                    "contract_sha256": HARNESS.sha(HARNESS.REPO / "test-support/framework/cli_process_v0_3.yaml"),
                     "cases": [{"name": "synthetic-case", "handoff_sha256": "1" * 64}]}
             HARNESS.write(evidence / "prepared-plan.json", plan)
             approval = {"status": "approved", "reviewer": "synthetic-test-reviewer", "review_ref": "synthetic://approval-test",

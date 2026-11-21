@@ -1,0 +1,12 @@
+Swarm product testing module
+Extracted from hermanwangd/Auto_Regression_Test_Framework,
+commit 597064a9c75c6323a164a06d050110e16d165aca,
+integrations/swarm-product-test/.
+
+The source framework POM declares Apache License, Version 2.0 and identifies
+Herman Wang (hermanwangd) as its developer. That declaration is preserved here.
+See EXTRACTION-PROVENANCE.md for the source tree identity.
+
+The repository owner authorized public delivery on 2026-11-21, superseding the
+initial private-repository restriction. No vendor JDBC drivers, credentials,
+production fixtures, or raw company evidence are included.

@@ -1,5 +1,9 @@
 # Standalone Test Module extraction provenance
 
+**Delivery override (2026-11-21):** the owner selected public delivery to
+`hermanwangd/swarm-test-module`. This supersedes the private-target requirement
+below and in the original handoff. The unrelated-history requirement remains.
+
 This root tree was extracted without rewriting production Java source from:
 
 - Original repository: `hermanwangd/Auto_Regression_Test_Framework`

@@ -19,7 +19,7 @@ import urllib.request
 import zipfile
 
 MODULE = Path(__file__).resolve().parents[1]
-REPO = MODULE.parents[1]
+REPO = MODULE
 FIXTURES = MODULE / "public-projects/sqlite"
 BUDGET = 200 * 1024**2
 RESERVE = 5 * 1024**3
@@ -222,8 +222,8 @@ def policy(args):
     require(value["actor"] == "local-ci-policy" and value["claim"] == CLAIM, "Wrong local CI policy boundary")
     required = {str(Path(__file__).resolve().relative_to(REPO)), str((FIXTURES / "asset-lock.json").relative_to(REPO)),
                 str((FIXTURES / "cases.json").relative_to(REPO)),
-                "docs/02-architecture/contracts/provider-contracts/cli_process_v0_3.yaml",
-                "samples/41-product-testing/reviewed_local/review-input.json"}
+                "test-support/framework/cli_process_v0_3.yaml",
+                "test-support/framework/review-input.json"}
     require(set(value["reviewed_files"]) == required, "CI policy must pin the complete harness, lock, oracle and template set")
     for relative, digest in value["reviewed_files"].items():
         require(sha(REPO / relative) == digest, "Committed reviewed input changed: " + relative)
@@ -231,7 +231,7 @@ def policy(args):
 
 
 def review_object(case, objects, build, actor, reference, reviewed_at, valid_until):
-    review = read(REPO / "samples/41-product-testing/reviewed_local/review-input.json")
+    review = read(REPO / "test-support/framework/review-input.json")
     review.pop("suite_id", None)
     review.pop("profile", None)
     review.update(reviewed_by=actor, review_ref=reference, project_ref="public-sqlite-cli-validation",
@@ -282,7 +282,7 @@ def prepare(args):
             write(suite / relative, value)
         contract = suite / "contracts/cli_process_v0_3.yaml"
         contract.parent.mkdir()
-        shutil.copyfile(REPO / "docs/02-architecture/contracts/provider-contracts/cli_process_v0_3.yaml", contract)
+        shutil.copyfile(REPO / "test-support/framework/cli_process_v0_3.yaml", contract)
         review = review_object(case, objects, build, "local-ci-policy" if authority else args.reviewed_by,
                                "local-ci-policy://sqlite-v1" if authority else args.review_ref,
                                (now - timedelta(seconds=1)).isoformat().replace("+00:00", "Z"),
@@ -300,7 +300,7 @@ def prepare(args):
             "cache_dir": str(cache), "build": build, "framework_jar": str(jar), "framework_sha256": args.framework_sha256,
             "module_cli_sha256": args.module_sha256, "harness_sha256": sha(Path(__file__)),
             "asset_lock_sha256": sha(FIXTURES / "asset-lock.json"), "fixtures_sha256": sha(FIXTURES / "cases.json"),
-            "contract_sha256": sha(REPO / "docs/02-architecture/contracts/provider-contracts/cli_process_v0_3.yaml"),
+            "contract_sha256": sha(REPO / "test-support/framework/cli_process_v0_3.yaml"),
             "policy_sha256": args.policy_sha256 if authority else None, "cases": prepared}
     write(evidence / "prepared-plan.json", plan)
     budget(cache, evidence)
@@ -328,7 +328,7 @@ def verify(args):
     require(plan["claim"] == CLAIM and plan["harness_sha256"] == sha(Path(__file__)), "Harness or claim changed")
     require(plan["asset_lock_sha256"] == sha(FIXTURES / "asset-lock.json") and
             plan["fixtures_sha256"] == sha(FIXTURES / "cases.json"), "Reviewed fixtures changed")
-    require(plan["contract_sha256"] == sha(REPO / "docs/02-architecture/contracts/provider-contracts/cli_process_v0_3.yaml"),
+    require(plan["contract_sha256"] == sha(REPO / "test-support/framework/cli_process_v0_3.yaml"),
             "Source CLI contract differs from reviewed plan")
     cache = Path(plan["cache_dir"])
     require(checked_build(cache) == plan["build"], "Build provenance changed")
