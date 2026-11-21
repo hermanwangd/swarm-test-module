@@ -296,6 +296,54 @@ def run(context_dir, design_path, review_path, review_pin, output):
     return report
 
 
+def pytest_regression(args):
+    """Run the project's pytest configuration with coverage.py in a trusted test environment."""
+    import os
+    import xml.etree.ElementTree as ET
+
+    repo, out = args.repo.resolve(strict=True), args.out.absolute()
+    source = contained(repo, args.source)
+    require(source.is_dir(), "production source directory is missing")
+    ac = read(args.ac_report)
+    require(ac.get("schema") == "project-test-report.v1", "expected project-test AC report")
+    def check_revision():
+        require(git(repo, "rev-parse", "HEAD").decode().strip() == ac["revision"], "AC and regression revisions differ")
+        require(not git(repo, "status", "--porcelain", "--untracked-files=normal"), "test checkout has uncommitted changes")
+    check_revision()
+    require(not out.resolve().is_relative_to(repo), "write evidence outside the checkout")
+    out.mkdir(parents=True, exist_ok=False, mode=0o700)
+    python = str(args.python.absolute())
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("COVERAGE_", "PYTEST_", "PYTHON"))}
+    env.update(COVERAGE_FILE=str(out / ".coverage"), PATH=str(Path(python).parent) + os.pathsep + env.get("PATH", ""))
+    pytest_args = ["-o", "addopts="] if args.include_stress else []
+    command = [python, "-m", "coverage", "run", "--branch", "--source=" + args.source, "-m", "pytest",
+               *pytest_args, "-q", "-ra", "--junitxml=" + str(out / "junit.xml")]
+    with (out / "pytest.log").open("wb") as log:
+        rc = subprocess.run(command, cwd=repo, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
+    result = {"schema": "project-regression-report.v1", "revision": ac["revision"],
+              "ac_report_sha256": sha(args.ac_report), "ac_status": ac["status"], "command": command,
+              "pytest_exit_code": rc, "source": args.source, "status": "INCOMPLETE"}
+    write(out / "report.json", result)
+    check_revision()
+    subprocess.run([python, "-m", "coverage", "json", "-o", str(out / "coverage.json")],
+                   cwd=repo, env=env, check=True)
+    data = json.loads((out / "coverage.json").read_text())
+    require(data["meta"]["branch_coverage"], "missing branch coverage")
+    stats = data["totals"]
+    result["lines"] = {"covered": stats["covered_lines"], "total": stats["num_statements"]}
+    result["branches"] = {"covered": stats["covered_branches"], "total": stats["num_branches"]}
+    suites = ET.parse(out / "junit.xml").getroot()
+    result["tests"] = {key: sum(int(node.attrib[key]) for node in suites.iter("testsuite"))
+                       for key in ("tests", "errors", "failures", "skipped")}
+    result["requirements"] = ac["requirements"]
+    result["evidence_sha256"] = {name: sha(out / name) for name in ("coverage.json", "junit.xml", "pytest.log")}
+    if rc == 0 and result["tests"]["tests"] > result["tests"]["skipped"] and ac["status"] == "PASS":
+        result["status"] = "PASS"
+    write(out / "report.json", result)
+    print(json.dumps(result))
+    return 0 if result["status"] == "PASS" else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -312,11 +360,22 @@ def main():
         command.add_argument("--context", type=Path, required=True)
         command.add_argument("--design", type=Path, required=True)
         if name == "run":
+            command.add_argument("--pytest-repo", type=Path)
+            command.add_argument("--pytest-python", type=Path)
+            command.add_argument("--pytest-source")
+            command.add_argument("--include-stress", action="store_true")
             command.add_argument("--review", type=Path, required=True)
             command.add_argument("--review-sha256", required=True)
             command.add_argument("--out", type=Path, required=True)
+    regression = commands.add_parser("pytest-regression", help="Collect native regression, line and branch results for a reviewed checkout")
+    for field in ["repo", "python", "ac-report", "out"]:
+        regression.add_argument("--" + field, type=Path, required=True)
+    regression.add_argument("--source", required=True)
+    regression.add_argument("--include-stress", action="store_true", help="Clear pytest addopts to include normally excluded tests")
     args = parser.parse_args()
     try:
+        if args.command == "pytest-regression":
+            return pytest_regression(args)
         if args.command == "collect":
             collect(args.repo, args.revision, args.base, {kind: getattr(args, kind) for kind in ["bdd", "ac", "pr", "code"]},
                     args.out.absolute(), args.pr_snapshot)
@@ -326,11 +385,19 @@ def main():
             print(json.dumps({"status": "DESIGNED_NOT_EXECUTED", "cases": len(design["cases"]),
                               "requirements": coverage(design, [])}))
         else:
+            project_options = [args.pytest_repo, args.pytest_python, args.pytest_source]
+            require(not any(project_options) or all(project_options), "provide pytest repo, python and source together")
+            require(not args.include_stress or all(project_options), "stress selection requires a pytest checkout")
             result = run(args.context.absolute(), args.design.absolute(), args.review.absolute(), args.review_sha256, args.out.absolute())
+            if all(project_options):
+                return pytest_regression(argparse.Namespace(
+                    repo=args.pytest_repo, python=args.pytest_python, source=args.pytest_source,
+                    include_stress=args.include_stress, out=args.out / "regression",
+                    ac_report=args.out / "report.json"))
             print(json.dumps(result, ensure_ascii=False))
             return 0 if result["status"] == "PASS" else 1
         return 0
-    except (ValueError, OSError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+    except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(json.dumps({"status": "BLOCKED", "reason": str(error)}), file=sys.stderr)
         return 2
 

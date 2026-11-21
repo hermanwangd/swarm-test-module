@@ -102,3 +102,19 @@ from a pinned module Git commit. It has no ENGCIM imports or model vendor lock-i
 Bind it to QA/Reviewer/Verifier alongside the host's test-design skill. The runtime
 binding uses the existing versioned Maven artifact/CLI and separately pinned
 Framework. Skill installation and live actor adoption are distinct checks.
+
+## Project regression and code coverage
+
+For a Python project using pytest, run the project's own regression suite as
+part of delivery. Append --pytest-repo, --pytest-python and --pytest-source to the normal run command so it executes both stages and writes the combined report under regression/. In the trusted local test environment, provision its test
+dependencies and coverage.py, install the pinned project, then run the following to add regression evidence to an existing AC run:
+
+    python3 <skill-dir>/scripts/project_test.py pytest-regression --repo <clean-checkout> --python <venv/bin/python> --source <production-source-dir> --ac-report <run/report.json> --out <fresh-evidence-dir>
+
+Use a clean checkout of the same revision as the AC report. Keep its configured
+pytest defaults for the normal regression run. To include stress tests excluded
+by default via addopts, use --include-stress after checking the project config
+because this clears all pytest addopts. Report test counts, skips, measured
+production lines and branches, and remaining gaps alongside the AC rows. For
+other build systems, run the project's native suite and coverage tooling in its
+test environment and report the equivalent evidence or the concrete blocker.
