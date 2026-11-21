@@ -111,16 +111,17 @@ def collect(repo, revision, base, sources, output, pr_snapshot=None):
         require(pr["head"] == revision and pr["base"] == base, "PR snapshot does not match source commits")
         require(pr.get("url") and pr.get("title") and isinstance(pr.get("body"), str), "incomplete PR snapshot")
         add("pr:snapshot", "pr", content(pr_snapshot), pr["url"])
-    diff = git(repo, "diff", "--no-ext-diff", "--no-textconv", "--unified=3", base, revision, "--")
+    diff_base = git(repo, "merge-base", base, revision).decode().strip()
+    diff = git(repo, "diff", "--no-ext-diff", "--no-textconv", "--unified=3", diff_base, revision, "--")
     if diff:
-        add("pr:diff", "pr", diff, base + ".." + revision)
+        add("pr:diff", "pr", diff, diff_base + ".." + revision)
     require(sum(len(p) for _, p in payloads) <= 16 * LIMIT, "context exceeds 32 MiB; split the scope")
     output.mkdir(parents=True, mode=0o700)
     for name, data in payloads:
         path = output / name
         path.parent.mkdir(exist_ok=True)
         path.write_bytes(data)
-    context = {"schema": "project-test-context.v1", "revision": revision, "base": base, "sources": records}
+    context = {"schema": "project-test-context.v1", "revision": revision, "base": base, "diff_base": diff_base, "sources": records}
     write(output / "context.json", context)
     return context
 
@@ -182,8 +183,8 @@ def coverage(design, results):
     for requirement in design["requirements"]:
         cases = [c["id"] for c in design["cases"] if requirement["id"] in c["requirements"]]
         observed = [statuses.get(c, "BLOCKED") for c in cases]
-        status = "UNTESTED" if not cases else "FAIL" if "FAIL" in observed else "BLOCKED" if any(
-            s != "PASS" for s in observed) else "PASS"
+        status = "UNTESTED" if not cases else "FAIL" if "FAIL" in observed else "BLOCKED" if (
+            requirement.get("gap") or any(s != "PASS" for s in observed)) else "PASS"
         rows.append({"requirement": requirement["id"], "status": status, "cases": cases,
                      "gap": requirement.get("gap"), "citations": requirement["citations"]})
     return rows

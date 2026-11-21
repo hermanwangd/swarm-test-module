@@ -110,6 +110,28 @@ class ProjectTest(unittest.TestCase):
             self.assertEqual([status, "UNTESTED"], [r["status"] for r in report])
         self.assertEqual("BLOCKED", FLOW.coverage(self.design, [])[0]["status"])
 
+    def test_partially_tested_ac_with_remaining_gap_is_not_pass(self):
+        self.design["requirements"][0]["gap"] = "Only the local part ran; remote behavior is missing"
+        report = FLOW.coverage(self.design, [{"id": "TC-1", "status": "PASS"}])
+        self.assertEqual("BLOCKED", report[0]["status"])
+
+    def test_pull_request_diff_excludes_base_branch_only_changes(self):
+        original = self.revision
+        (self.repo / "base-only.txt").write_text("Unrelated change on the base branch\n")
+        self.git("add", ".")
+        self.git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "base advances")
+        advanced_base = self.git("rev-parse", "HEAD")
+        self.git("checkout", "-q", "--detach", original)
+        (self.repo / "Main.java").write_text("class Main { int change; }\n")
+        self.git("add", ".")
+        self.git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "PR change")
+        output = self.root / "diverged"
+        context = FLOW.collect(self.repo, self.git("rev-parse", "HEAD"), advanced_base,
+                               {"bdd": ["behavior.feature"], "ac": ["AC.md"], "pr": ["PR.md"], "code": ["Main.java"]}, output)
+        diff = next(s for s in context["sources"] if s["id"] == "pr:diff")
+        self.assertNotIn("base-only.txt", (output / diff["snapshot"]).read_text())
+        self.assertEqual(original, context["diff_base"])
+
     def test_review_is_pinned_before_any_execution(self):
         review = self.root / "review.json"
         FLOW.write(review, {"status": "approved"})
