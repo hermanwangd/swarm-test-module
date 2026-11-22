@@ -149,8 +149,11 @@ machine-readable evidence.
 When a reviewed case FAILs, `summary.coder_handoff.required` is true. The handoff
 names the coder as the next owner, but marks the root cause as needing triage
 between product code and the reviewed oracle. It links the receipt/result evidence
-and asks for a fresh reviewed rerun after the fix. BLOCKED or UNTESTED cases do not
-become coder work unless a FAIL is present.
+and asks for a fresh reviewed rerun after the fix. Failure entries also include the
+canonical failure code/classification/reason, owner action, run ID, repository
+revisions, observed steps, verify results and evidence references so the coder can
+reproduce and diagnose the failure instead of relying on a generic FAIL label.
+BLOCKED or UNTESTED cases do not become coder work unless a FAIL is present.
 
 A reused existing test still needs an execution record from the applicable native
 runner. A citation to an old test is not itself execution evidence. New or updated

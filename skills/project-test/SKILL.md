@@ -124,9 +124,9 @@ issue comment, notification or deployment is authorized by this skill.
    writes `report.json` and `summary.md`, with a result for every AC and a summary of case,
    requirement, inventory and code-coverage counts. FAIL stays FAIL; blocked,
    skipped or absent execution never counts as PASS. A FAIL creates a coder
-   handoff with the linked evidence and a triage request; it does not claim the
-   root cause is already proven. Preserve the first run and use a fresh directory
-   after repairs; changed inputs require a new review.
+   handoff with the linked evidence, canonical failure details, observed steps
+   and a triage request; it does not claim the root cause is already proven.
+   Preserve the first run and use a fresh directory after repairs; changed inputs require a new review.
 
 6. Return concrete case/AC counts, failures with expected/actual and evidence
    links, uncovered requirements, tested version and environment. Describe the
