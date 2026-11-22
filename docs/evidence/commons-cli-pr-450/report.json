@@ -1,0 +1,124 @@
+{
+  "revision": "f5809722f818c38b6264afd31ad179ec0609e5df",
+  "runner": [
+    "mvn",
+    "--errors",
+    "--show-version",
+    "--batch-mode",
+    "--no-transfer-progress"
+  ],
+  "plan_sha256": "a072b66ca65d2f6e01d897e324299d16fcf3dd24e45b1db4dab82ea200a3ac28",
+  "status": "INCOMPLETE",
+  "runs": [
+    {
+      "origin": "existing",
+      "path": "src/test/java/org/apache/commons/cli/DefaultParserTest.java",
+      "class": "org.apache.commons.cli.DefaultParserTest",
+      "method": "testPropertiesDoNotChangeRegisteredOption",
+      "requirements": [
+        "registered-option"
+      ],
+      "assertion": "Checks both the value returned by CommandLine and the null registered option values.",
+      "status": "PASS",
+      "junit": [
+        {
+          "file": "evidence/target/surefire-reports/TEST-org.apache.commons.cli.DefaultParserTest.xml",
+          "sha256": "3af58b2eebddcb59b6c56956cc962e1699b6f5086bdd5dd42ffcd2aba8abdadd",
+          "class": "org.apache.commons.cli.DefaultParserTest",
+          "method": "testPropertiesDoNotChangeRegisteredOption",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "origin": "existing",
+      "path": "src/test/java/org/apache/commons/cli/DefaultParserTest.java",
+      "class": "org.apache.commons.cli.DefaultParserTest",
+      "method": "testPropertiesReuseOptions",
+      "requirements": [
+        "second-property"
+      ],
+      "assertion": "Reuses one parser and Options and checks that the second property value wins.",
+      "status": "PASS",
+      "junit": [
+        {
+          "file": "evidence/target/surefire-reports/TEST-org.apache.commons.cli.DefaultParserTest.xml",
+          "sha256": "3af58b2eebddcb59b6c56956cc962e1699b6f5086bdd5dd42ffcd2aba8abdadd",
+          "class": "org.apache.commons.cli.DefaultParserTest",
+          "method": "testPropertiesReuseOptions",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "origin": "existing",
+      "path": "src/test/java/org/apache/commons/cli/DefaultParserTest.java",
+      "class": "org.apache.commons.cli.DefaultParserTest",
+      "method": "testPropertiesDoNotLeakIntoNextParse",
+      "requirements": [
+        "later-arguments",
+        "later-pairs"
+      ],
+      "assertion": "Checks the new CLI option, empty remainder and exact property map after the second parse.",
+      "status": "PASS",
+      "junit": [
+        {
+          "file": "evidence/target/surefire-reports/TEST-org.apache.commons.cli.DefaultParserTest.xml",
+          "sha256": "3af58b2eebddcb59b6c56956cc962e1699b6f5086bdd5dd42ffcd2aba8abdadd",
+          "class": "org.apache.commons.cli.DefaultParserTest",
+          "method": "testPropertiesDoNotLeakIntoNextParse",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "origin": "existing",
+      "path": "src/test/java/org/apache/commons/cli/DefaultParserTest.java",
+      "class": "org.apache.commons.cli.DefaultParserTest",
+      "method": "testPropertiesPreserveExistingOptionValue",
+      "requirements": [
+        "preset"
+      ],
+      "assertion": "Checks that a pre-existing value wins over the supplied property and survives parsing.",
+      "status": "PASS",
+      "junit": [
+        {
+          "file": "evidence/target/surefire-reports/TEST-org.apache.commons.cli.DefaultParserTest.xml",
+          "sha256": "3af58b2eebddcb59b6c56956cc962e1699b6f5086bdd5dd42ffcd2aba8abdadd",
+          "class": "org.apache.commons.cli.DefaultParserTest",
+          "method": "testPropertiesPreserveExistingOptionValue",
+          "status": "PASS"
+        }
+      ]
+    }
+  ],
+  "requirements": {
+    "registered-option": "PASS",
+    "second-property": "PASS",
+    "later-arguments": "PASS",
+    "later-pairs": "PASS",
+    "preset": "PASS"
+  },
+  "coverage": {
+    "BRANCH": {
+      "covered": 967,
+      "missed": 39
+    },
+    "LINE": {
+      "covered": 1951,
+      "missed": 36
+    }
+  },
+  "regression": {
+    "PASS": 937,
+    "FAIL": 0,
+    "SKIPPED": 61,
+    "status": "BLOCKED",
+    "exit_code": 1,
+    "log_sha256": "f083ed7395ba83387bef23c7d3d8892f9771b30890a4ff27ac1e22caf2d6b65a"
+  },
+  "coverage_execution": {
+    "exit_code": 0,
+    "log_sha256": "f755ba95a2824c1aee02f701e0a872606b2600a015476b50fbdd885c721af112"
+  }
+}

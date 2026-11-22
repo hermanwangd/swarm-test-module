@@ -1,6 +1,20 @@
-# Swarm product testing module
+# Swarm QA Module
 
-> **Standalone extraction:** This branch contains only the existing Swarm Product Test module, extracted from `integrations/swarm-product-test/` on the framework's `plug-in-module` branch. The production Java classes are carried forward unchanged. See [extraction provenance](EXTRACTION-PROVENANCE.md) and [company Swarm import](docs/COMPANY-SWARM-IMPORT.md).\n> Build with `mvn -B -ntp verify`; run a clean downstream import smoke with `mvn -B -ntp -DskipTests install && mvn -B -ntp -f examples/company-swarm-consumer/pom.xml test`. This is **not** evidence of real SIT/E2E acceptance.\n\nThis Java 17 module invokes the existing Test Framework and imports its validated canonical result and evidence. It does not run test steps, implement assertions, query Cognee, create `VerificationResult`, fabricate a Multica reference, or close a mission. Swarm analysis/review roles remain responsible for requirements, cross-repository impact, proposals, review and interpretation. Existing framework assertions decide test verdicts.
+ENGCIM assigns a PR to its QA agent. The agent uses the project-test skill to trace requirements, identify missing cases and write the Framework DSL with expected results. The QA Module coordinates review, execution and reporting. The Test Framework runs the reviewed DSL and records assertion results. The published Java artifact is `swarm-product-test`.
+
+To **read a project's BDD, AC, PR and code, design test cases and execute them**,
+install the [project-test agent skill](skills/project-test/SKILL.md). It directs
+the host's QA agent to author source-backed cases, obtains independent review,
+and executes through this module and the existing Framework. The resulting
+report maps every inventoried AC to PASS, FAIL, BLOCKED or UNTESTED.
+The Maven JAR by itself is the execution component; it does not contain an AI
+test designer. See [workflow formats](skills/project-test/references/formats.md)
+and [actual design-to-execution evidence](docs/PROJECT-TEST-RESULTS-20261121.md).
+
+> **Standalone extraction:** This branch contains only the existing Swarm Product Test module, extracted from `integrations/swarm-product-test/` on the framework's `plug-in-module` branch. The production Java classes are carried forward unchanged. See [extraction provenance](EXTRACTION-PROVENANCE.md) and [company Swarm import](docs/COMPANY-SWARM-IMPORT.md).
+> Build with `mvn -B -ntp verify`; run a clean downstream import smoke with `mvn -B -ntp -DskipTests install && mvn -B -ntp -f examples/company-swarm-consumer/pom.xml test`. This is **not** evidence of real SIT/E2E acceptance.
+
+This Java 17 module invokes the existing Test Framework and imports its validated canonical result and evidence. It does not run test steps, implement assertions, query Cognee, create `VerificationResult`, fabricate a Multica reference, or close a mission. Swarm analysis/review roles remain responsible for requirements, cross-repository impact, proposals, review and interpretation. Existing framework assertions decide test verdicts.
 
 For the concrete TAA/gTAA layer mapping, known adapter exceptions and verification boundaries, see [TAA/gTAA alignment](docs/TAA-GTAA.md).
 
@@ -98,7 +112,7 @@ It records every compiled original source digest and checks that the originals r
 
 ## Packaged smoke
 
-Build the framework separately, then supply the approved artifact and handoff pins explicitly. The Python harnesses that materialize reviewed framework inputs (`scripts/public-cli-project.py`, `scripts/grpc-native.py`) read the provider contract and review template from the separate framework **source checkout**: pass `--framework-source /absolute/framework-checkout` or set `SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE` (the legacy in-tree layout is still auto-detected).
+Build the framework separately, then supply the approved artifact and handoff pins explicitly. The SQLite harness uses the bundled reviewed inputs in `test-support/framework/` by default. Both the SQLite and gRPC harnesses accept a separate framework source checkout through `--framework-source` or `SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE` and support the legacy in-tree layout.
 
 ```sh
 python3 scripts/smoke.py \

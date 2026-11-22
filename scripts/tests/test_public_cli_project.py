@@ -136,8 +136,16 @@ class PublicCliProjectTest(unittest.TestCase):
             empty.mkdir()
             with self.assertRaisesRegex(ValueError, "lacks the reviewed contract"):
                 HARNESS.framework_source(Namespace(framework_source=empty))
-            with self.assertRaisesRegex(ValueError, "Framework source root required"):
-                HARNESS.framework_source(Namespace(framework_source=None))
+            with patch.object(HARNESS, "MODULE", empty / "nested" / "module"):
+                with self.assertRaisesRegex(ValueError, "Framework source root required"):
+                    HARNESS.framework_source(Namespace(framework_source=None))
+
+    def test_bundled_framework_inputs_match_committed_policy(self):
+        policy_path = HARNESS.FIXTURES / "local-ci-policy.json"
+        args = Namespace(local_ci_policy=policy_path, policy_sha256=HARNESS.sha(policy_path), framework_source=None)
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(HARNESS.MODULE / "test-support/framework", HARNESS.framework_source(args))
+            self.assertEqual("local-ci-policy", HARNESS.policy(args)["actor"])
 
     def test_policy_pins_module_and_framework_files_at_separate_roots(self):
         with tempfile.TemporaryDirectory() as name:

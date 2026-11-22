@@ -1,0 +1,100 @@
+name: Publish Maven package
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v1.0.0']
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: internal-maven-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # The owner explicitly selected public delivery on 2026-11-21. Never publish
+    # from the staging framework repository or an unrelated fork.
+    if: github.repository == 'hermanwangd/swarm-test-module'
+    environment: internal-maven
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MAVEN_OPTS: -Xmx1024m -XX:MaxMetaspaceSize=384m
+      MAVEN_USERNAME: ${{ github.actor }}
+      MAVEN_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+      REGISTRY_URL: https://maven.pkg.github.com/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          server-id: internal-maven
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+      - name: Check release identity and independent history
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_TYPE" = tag
+          test "$GITHUB_REF_NAME" = v1.0.0
+          test -n "$MAVEN_USERNAME"
+          test -n "$MAVEN_PASSWORD"
+          case "$REGISTRY_URL" in https://*) ;; *) exit 2;; esac
+          roots=$(git rev-list --max-parents=0 HEAD)
+          test "$(printf '%s\n' "$roots" | wc -l)" -eq 1
+          git show "$roots:pom.xml" > /tmp/import-root-pom.xml
+          python3 - <<'PY'
+          import xml.etree.ElementTree as E
+          ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
+          for path in ('/tmp/import-root-pom.xml', 'pom.xml'):
+              root = E.parse(path).getroot()
+              assert root.findtext('m:artifactId', namespaces=ns) == 'swarm-product-test'
+              assert root.findtext('m:version', namespaces=ns) == '1.0.0'
+          PY
+      - name: Refuse an existing immutable version
+        run: |
+          python3 - <<'PY'
+          import base64, os, urllib.request, urllib.error
+          base = os.environ['REGISTRY_URL'].rstrip('/') + '/com/featuredeliveryintelligence/swarm-product-test/1.0.0/swarm-product-test-1.0.0'
+          auth = base64.b64encode((os.environ['MAVEN_USERNAME'] + ':' + os.environ['MAVEN_PASSWORD']).encode()).decode()
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *args, **kwargs): return None
+          for suffix in ('.pom', '.jar', '-host.jar', '-provider.jar', '-cli.jar', '-sources.jar'):
+              request = urllib.request.Request(base + suffix, headers={'Authorization': 'Basic ' + auth}, method='HEAD')
+              try:
+                  urllib.request.build_opener(NoRedirect).open(request, timeout=30).close()
+              except urllib.error.HTTPError as error:
+                  if error.code != 404: raise SystemExit('Registry preflight failed: HTTP ' + str(error.code))
+              else:
+                  raise SystemExit('Version contains existing artifacts; choose a deliberate new version')
+          PY
+      - name: Verify all distributions
+        run: mvn -B -ntp verify
+      - name: Record source and artifacts
+        run: |
+          git rev-parse HEAD > target/source-commit.txt
+          sha256sum target/swarm-product-test-*.jar > target/module-checksums.sha256
+          printf '%s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > target/publication-ci.txt
+      - name: Publish all classifiers to GitHub Packages
+        run: mvn -B -ntp -DskipTests deploy "-DaltDeploymentRepository=internal-maven::$REGISTRY_URL"
+      - name: Resolve and execute an unrelated fresh consumer
+        run: |
+          digest=$(sha256sum target/swarm-product-test-1.0.0.jar | cut -d ' ' -f 1)
+          bash scripts/verify-registry-consumer.sh "$REGISTRY_URL" "$digest" "$RUNNER_TEMP/registry-consumer"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: internal-maven-publication-${{ github.run_id }}
+          path: |
+            target/source-commit.txt
+            target/module-checksums.sha256
+            target/publication-ci.txt
+            target/surefire-reports/
+            ${{ runner.temp }}/registry-consumer/consumer-test.xml
+            ${{ runner.temp }}/registry-consumer/resolved-checksum.sha256

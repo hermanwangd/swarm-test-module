@@ -1,0 +1,50 @@
+{
+  "revision": "c53d3732b98c764932e146c007146ad402acb229",
+  "workflow": ".github/workflows/tests.yaml",
+  "environment": "py3.12",
+  "cases": [
+    {
+      "origin": "existing",
+      "path": "tests/test_options.py",
+      "function": "test_show_envvar_empty",
+      "requirements": [
+        "AC-empty"
+      ],
+      "assertion": "Empty explicit names leave the help line identical to an absent name, including prefix fallback."
+    },
+    {
+      "origin": "existing",
+      "path": "tests/test_options.py",
+      "function": "test_missing_envvar_sequence",
+      "requirements": [
+        "AC-sequence",
+        "AC-empty"
+      ],
+      "assertion": "Missing-option errors render the expected sequence and omit empty names."
+    },
+    {
+      "origin": "added",
+      "path": "test_envvar_hint.py",
+      "function": "test_invalid_value_lists_individual_envvars",
+      "requirements": [
+        "AC-sequence"
+      ],
+      "assertion": "Invalid-value diagnostics list each variable name as specified in the PR body.",
+      "sha256": "a7416ac1585fa3b2e89c41d358629cc7183da9a39d815f57207c70e0bbcf4b72"
+    },
+    {
+      "origin": "added",
+      "path": "test_envvar_hint.py",
+      "function": "test_invalid_value_omits_empty_envvar_hint",
+      "requirements": [
+        "AC-empty"
+      ],
+      "assertion": "The invalid-value diagnostic omits the env-var hint for absent and empty names.",
+      "sha256": "a7416ac1585fa3b2e89c41d358629cc7183da9a39d815f57207c70e0bbcf4b72"
+    }
+  ],
+  "requirements": [
+    "AC-empty",
+    "AC-sequence"
+  ]
+}

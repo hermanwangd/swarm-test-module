@@ -50,22 +50,26 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def framework_source(args=None):
-    """Locate the separate framework source checkout holding the reviewed inputs.
+def framework_input(source, relative):
+    if source == MODULE / "test-support/framework":
+        return source / Path(relative).name
+    return source / relative
 
-    Explicit --framework-source wins, then SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE; the legacy
-    integrations/swarm-product-test in-tree layout is auto-detected for compatibility.
-    """
+
+def framework_source(args=None):
+    """Prefer an explicit checkout, then the environment, bundled inputs, or the legacy tree."""
     explicit = getattr(args, "framework_source", None) if args is not None else None
     candidate = explicit or os.environ.get("SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE")
     if candidate:
         root = Path(candidate).resolve(strict=True)
+    elif (MODULE / "test-support/framework").is_dir():
+        root = MODULE / "test-support/framework"
     else:
         legacy = MODULE.parents[1]
         require((legacy / CONTRACT).is_file() and (legacy / REVIEW_TEMPLATE).is_file(),
                 "Framework source root required: pass --framework-source or set SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE")
         root = legacy
-    require((root / CONTRACT).is_file() and (root / REVIEW_TEMPLATE).is_file(),
+    require(all(framework_input(root, path).is_file() for path in (CONTRACT, REVIEW_TEMPLATE)),
             "Framework source root lacks the reviewed contract and review template: " + str(root))
     return root
 
@@ -248,13 +252,13 @@ def policy(args):
     require(set(value["reviewed_files"]) == module_files | framework_files,
             "CI policy must pin the complete harness, lock, oracle and template set")
     for relative, digest in value["reviewed_files"].items():
-        base = source if relative in framework_files else MODULE
-        require(sha(base / relative) == digest, "Committed reviewed input changed: " + relative)
+        reviewed_path = framework_input(source, relative) if relative in framework_files else MODULE / relative
+        require(sha(reviewed_path) == digest, "Committed reviewed input changed: " + relative)
     return value
 
 
 def review_object(source, case, objects, build, actor, reference, reviewed_at, valid_until):
-    review = read(source / REVIEW_TEMPLATE)
+    review = read(framework_input(source, REVIEW_TEMPLATE))
     review.pop("suite_id", None)
     review.pop("profile", None)
     review.update(reviewed_by=actor, review_ref=reference, project_ref="public-sqlite-cli-validation",
@@ -306,7 +310,7 @@ def prepare(args):
             write(suite / relative, value)
         contract = suite / "contracts/cli_process_v0_3.yaml"
         contract.parent.mkdir()
-        shutil.copyfile(source / CONTRACT, contract)
+        shutil.copyfile(framework_input(source, CONTRACT), contract)
         review = review_object(source, case, objects, build, "local-ci-policy" if authority else args.reviewed_by,
                                "local-ci-policy://sqlite-v1" if authority else args.review_ref,
                                (now - timedelta(seconds=1)).isoformat().replace("+00:00", "Z"),
@@ -324,7 +328,7 @@ def prepare(args):
             "cache_dir": str(cache), "build": build, "framework_jar": str(jar), "framework_sha256": args.framework_sha256,
             "module_cli_sha256": args.module_sha256, "harness_sha256": sha(Path(__file__)),
             "asset_lock_sha256": sha(FIXTURES / "asset-lock.json"), "fixtures_sha256": sha(FIXTURES / "cases.json"),
-            "contract_sha256": sha(source / CONTRACT),
+            "contract_sha256": sha(framework_input(source, CONTRACT)),
             "policy_sha256": args.policy_sha256 if authority else None, "cases": prepared}
     write(evidence / "prepared-plan.json", plan)
     budget(cache, evidence)
@@ -353,7 +357,7 @@ def verify(args):
     require(plan["claim"] == CLAIM and plan["harness_sha256"] == sha(Path(__file__)), "Harness or claim changed")
     require(plan["asset_lock_sha256"] == sha(FIXTURES / "asset-lock.json") and
             plan["fixtures_sha256"] == sha(FIXTURES / "cases.json"), "Reviewed fixtures changed")
-    require(plan["contract_sha256"] == sha(source / CONTRACT),
+    require(plan["contract_sha256"] == sha(framework_input(source, CONTRACT)),
             "Source CLI contract differs from reviewed plan")
     cache = Path(plan["cache_dir"])
     require(checked_build(cache) == plan["build"], "Build provenance changed")

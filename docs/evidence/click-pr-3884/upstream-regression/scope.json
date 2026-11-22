@@ -1,0 +1,50 @@
+{
+  "upstream_default_regression": "2111 passed, 24 skipped, 1 expected failure, 31000 stress cases deselected",
+  "python": "3.12.14",
+  "platform": "Linux",
+  "upstream_help_cases_passed": [
+    "test_show_envvar_empty[None-  --units TEXT\\n-None]",
+    "test_show_envvar_empty[None-  --units TEXT\\n-envvar1]",
+    "test_show_envvar_empty[None-  --units TEXT\\n-]",
+    "test_show_envvar_empty[WEATHER-  --units TEXT  [env var: WEATHER_UNITS]\\n-None]",
+    "test_show_envvar_empty[WEATHER-  --units TEXT  [env var: WEATHER_UNITS]\\n-envvar1]",
+    "test_show_envvar_empty[WEATHER-  --units TEXT  [env var: WEATHER_UNITS]\\n-]"
+  ],
+  "changed_executable_lines_covered": [
+    3273,
+    3274,
+    3277,
+    3278,
+    3446,
+    3451,
+    3453
+  ],
+  "changed_executable_lines_missed": [],
+  "covered_arcs_from_changed_lines": [
+    [
+      3273,
+      3274
+    ],
+    [
+      3273,
+      3279
+    ],
+    [
+      3446,
+      3451
+    ],
+    [
+      3446,
+      3453
+    ],
+    [
+      3453,
+      3454
+    ],
+    [
+      3453,
+      3462
+    ]
+  ],
+  "missed_arcs_from_changed_lines": []
+}

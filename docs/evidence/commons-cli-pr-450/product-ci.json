@@ -1,0 +1,77 @@
+{
+  "stage": "CI",
+  "product": "apache/commons-cli",
+  "pr_url": "https://github.com/apache/commons-cli/pull/450",
+  "pr_head": "f5809722f818c38b6264afd31ad179ec0609e5df",
+  "run_query": {
+    "event": "pull_request",
+    "commit_sha": "f5809722f818c38b6264afd31ad179ec0609e5df"
+  },
+  "workflow": "Java CI",
+  "run_url": "https://github.com/apache/commons-cli/actions/runs/40705094271",
+  "workflow_status": "completed",
+  "workflow_conclusion": "success",
+  "returned_jobs": [
+    {
+      "id": 122874945679,
+      "name": "build (17, false)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 122874946017,
+      "name": "build (25, false)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 122874946064,
+      "name": "build (28-ea, true)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 122874946068,
+      "name": "build (11, false)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 122874946082,
+      "name": "build (8, false)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 122874946112,
+      "name": "build (21, false)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 122874946211,
+      "name": "build (27, false)",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "inspected_job": {
+    "name": "build (17, false)",
+    "id": 122874945679,
+    "url": "https://github.com/apache/commons-cli/actions/runs/40705094271/job/122874945679",
+    "checkout_sha": "631a3805f377730fac1220582f56854c1de97b6b",
+    "log_excerpts": [
+      "2026-10-28T15:10:06.4365270Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +631a3805f377730fac1220582f56854c1de97b6b:refs/remotes/pull/450/merge",
+      "2026-10-28T15:10:07.1445066Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/450/merge",
+      "2026-10-28T15:10:07.1647721Z [command]/usr/bin/git log -1 --format=%H",
+      "2026-10-28T15:10:07.1675012Z 631a3805f377730fac1220582f56854c1de97b6b",
+      "2026-10-28T15:10:38.3762797Z [INFO] Tests run: 998, Failures: 0, Errors: 0, Skipped: 61",
+      "2026-10-28T15:11:12.4767929Z [INFO] BUILD SUCCESS"
+    ]
+  },
+  "returned_artifact_names": [],
+  "required_checks_policy": "NOT_VERIFIED",
+  "per_ac_verdict": "NOT_VERIFIED",
+  "post_cd_sit": "NOT_VERIFIED",
+  "release_gate": "NOT_VERIFIED"
+}

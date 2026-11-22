@@ -1,0 +1,17 @@
+py3.12: uv-sync> .venv/bin/uv sync --locked --python-preference system --no-default-groups --no-editable --reinstall-package click --group tests -p cpython3.12
+py3.12: commands[0]> pytest -v --tb=short --basetemp=/tmp/engcim-s06-8elrefpo/repo/.tox/py3.12/tmp tests/test_formatting.py::test_help_formatter_keeps_words_whole --junitxml=/workspace/external-validation/local-3902-head/2.xml
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.0.2, pluggy-1.6.0 -- /tmp/engcim-s06-8elrefpo/repo/.tox/py3.12/bin/python3
+cachedir: .tox/py3.12/.pytest_cache
+rootdir: /tmp/engcim-s06-8elrefpo/repo
+configfile: pyproject.toml
+collecting ... collected 3 items
+
+tests/test_formatting.py::test_help_formatter_keeps_words_whole[write_usage] PASSED [ 33%]
+tests/test_formatting.py::test_help_formatter_keeps_words_whole[write_text] PASSED [ 66%]
+tests/test_formatting.py::test_help_formatter_keeps_words_whole[write_dl] PASSED [100%]
+
+--- generated xml file: /workspace/external-validation/local-3902-head/2.xml ---
+============================== 3 passed in 0.02s ===============================
+  py3.12: OK (0.67=setup[0.33]+cmd[0.34] seconds)
+  congratulations :) (0.71 seconds)

@@ -1,0 +1,55 @@
+{
+  "pr": "https://github.com/pallets/click/pull/3902",
+  "base": "8abb77a8432e03ed14a95f972b44f905279415a7",
+  "revision": "7996a89c5a4ce1c451e2e1c9c5a00eb0c844d4ce",
+  "sources": [
+    "https://github.com/pallets/click/pull/3902",
+    "https://github.com/pallets/click/issues/3362",
+    "CHANGES.md:28-29"
+  ],
+  "environment": "py3.12",
+  "workflow": ".github/workflows/tests.yaml",
+  "requirements": [
+    "words",
+    "usage"
+  ],
+  "cases": [
+    {
+      "origin": "existing",
+      "path": "tests/test_formatting.py",
+      "function": "test_wrap_text_keeps_words_whole",
+      "requirements": [
+        "words"
+      ],
+      "assertion": "Compare wrapped lines including hyphenated, long and styled words."
+    },
+    {
+      "origin": "existing",
+      "path": "tests/test_formatting.py",
+      "function": "test_help_formatter_write_usage_keeps_arguments_whole",
+      "requirements": [
+        "usage"
+      ],
+      "assertion": "Compare every usage line including over-width arguments."
+    },
+    {
+      "origin": "existing",
+      "path": "tests/test_formatting.py",
+      "function": "test_help_formatter_keeps_words_whole",
+      "requirements": [
+        "words"
+      ],
+      "assertion": "Compare all original words across the formatter methods."
+    },
+    {
+      "origin": "added",
+      "path": "test_local_help.py",
+      "function": "test_custom_metavar_survives_narrow_help",
+      "requirements": [
+        "usage"
+      ],
+      "assertion": "The actual --help command succeeds and displays the complete custom metavar as one token.",
+      "sha256": "ae2d33862a0423634b75d2f5cd12a776fb43201565010cc9b856b17cabaf8590"
+    }
+  ]
+}

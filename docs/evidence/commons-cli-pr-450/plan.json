@@ -1,0 +1,64 @@
+{
+  "pr": "https://github.com/apache/commons-cli/pull/450",
+  "base": "d959de8fb66f8aee8964dd3080920dfb9cdfcdc3",
+  "revision": "f5809722f818c38b6264afd31ad179ec0609e5df",
+  "workflow": ".github/workflows/maven.yml",
+  "runner": [
+    "mvn",
+    "--errors",
+    "--show-version",
+    "--batch-mode",
+    "--no-transfer-progress"
+  ],
+  "requirements": [
+    "registered-option",
+    "second-property",
+    "later-arguments",
+    "later-pairs",
+    "preset"
+  ],
+  "cases": [
+    {
+      "origin": "existing",
+      "path": "src/test/java/org/apache/commons/cli/DefaultParserTest.java",
+      "class": "org.apache.commons.cli.DefaultParserTest",
+      "method": "testPropertiesDoNotChangeRegisteredOption",
+      "requirements": [
+        "registered-option"
+      ],
+      "assertion": "Checks both the value returned by CommandLine and the null registered option values."
+    },
+    {
+      "origin": "existing",
+      "path": "src/test/java/org/apache/commons/cli/DefaultParserTest.java",
+      "class": "org.apache.commons.cli.DefaultParserTest",
+      "method": "testPropertiesReuseOptions",
+      "requirements": [
+        "second-property"
+      ],
+      "assertion": "Reuses one parser and Options and checks that the second property value wins."
+    },
+    {
+      "origin": "existing",
+      "path": "src/test/java/org/apache/commons/cli/DefaultParserTest.java",
+      "class": "org.apache.commons.cli.DefaultParserTest",
+      "method": "testPropertiesDoNotLeakIntoNextParse",
+      "requirements": [
+        "later-arguments",
+        "later-pairs"
+      ],
+      "assertion": "Checks the new CLI option, empty remainder and exact property map after the second parse."
+    },
+    {
+      "origin": "existing",
+      "path": "src/test/java/org/apache/commons/cli/DefaultParserTest.java",
+      "class": "org.apache.commons.cli.DefaultParserTest",
+      "method": "testPropertiesPreserveExistingOptionValue",
+      "requirements": [
+        "preset"
+      ],
+      "assertion": "Checks that a pre-existing value wins over the supplied property and survives parsing."
+    }
+  ],
+  "coverage_goal": "jacoco:report"
+}

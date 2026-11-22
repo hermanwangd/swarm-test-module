@@ -1,0 +1,18 @@
+{
+  "revision": "bb695aaecdef95832d167fc1d508921745aa824e",
+  "route": "Same probe invoked directly using isolated Python",
+  "cases": [
+    {
+      "case": "CLICK-sequence",
+      "expected": "2 Error: Missing option '--region' (env var: 'PRIMARY REGION', 'FALLBACK').\n",
+      "actual": "2 Error: Missing option '--region' (env var: '('PRIMARY REGION', 'FALLBACK')').\n",
+      "status": "FAIL"
+    },
+    {
+      "case": "CLICK-empty",
+      "expected": "2 True\n0 True\n2 True\n0 True\n",
+      "actual": "2 False\n0 False\n2 False\n0 False\n",
+      "status": "FAIL"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "status": "approved",
+  "reviewer": "codex:/root/shipping_review",
+  "review_ref": "Codex /root/shipping_review independent CLI oracle review, 2026-11-21, design 204b3be5db28248a2239f721acd68c7926ae28c4f1c35e99700527f0f96d223c",
+  "context_sha256": "37676a9c132e65560437fdc0318f6730754b091c3bc9c6d56b4221ccb48f946a",
+  "design_sha256": "204b3be5db28248a2239f721acd68c7926ae28c4f1c35e99700527f0f96d223c",
+  "runtime": {
+    "java": {
+      "path": "/workspace/.toolchains/temurin-17/bin/java",
+      "sha256": "a2195ae9f8a91b82f53df7e1d1b9a650937ebbabbf67d0240c6378b4fbd9990b"
+    },
+    "module": {
+      "path": "/workspace/published-artifacts/swarm-product-test-1.0.0-cli.jar",
+      "sha256": "3d8e46807562bc44c11be9d6ff061d6a9dbe8ed30d77c8ad46810ffd33e04ae3"
+    },
+    "framework": {
+      "path": "/workspace/framework/target/spec-driven-auto-regression-0.3.2.jar",
+      "sha256": "cccbcbe2879fd2bf2f66eaf5ac60468903cf7a509076efdb5f661f09cbf898dd"
+    }
+  },
+  "subjects": [
+    {
+      "path": "/workspace/published-artifacts/swarm-product-test-1.0.0-cli.jar",
+      "sha256": "3d8e46807562bc44c11be9d6ff061d6a9dbe8ed30d77c8ad46810ffd33e04ae3"
+    },
+    {
+      "path": "/workspace/ship-evidence/project-workflow/request-input.json",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    {
+      "path": "/workspace/swarm-test-module/skills/project-test/scripts/project_test.py",
+      "sha256": "e5a0472b18c44f9571055de69938335a747a6263d1eaa17b0c65850e3087f230"
+    },
+    {
+      "path": "/workspace/engcim-swarm/engcim-swarm/skills/project-test/scripts/project_test.py",
+      "sha256": "e5a0472b18c44f9571055de69938335a747a6263d1eaa17b0c65850e3087f230"
+    }
+  ],
+  "handoffs": {
+    "TC-CLI-EMPTY": "b3ff3a487938a4be2e23034e0ec0f1fcf93c5809732359ce2d4e5c65ff05c704",
+    "TC-CLI-EXTRA": "4182c1cb5de2c49fa3d083a9dcf559664a38b99d7beace449aad48031ec0b9ac",
+    "TC-CLI-NO-BINDING": "69b37bf18bbfdc6c076fc53abcc918ba4835c3e238532d218da2297654008952"
+  }
+}

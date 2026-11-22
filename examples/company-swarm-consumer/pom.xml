@@ -8,12 +8,13 @@
   <properties>
     <maven.compiler.release>17</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <swarm.test.version>1.0.0</swarm.test.version>
   </properties>
   <dependencies>
     <dependency>
       <groupId>com.featuredeliveryintelligence</groupId>
       <artifactId>swarm-product-test</artifactId>
-      <version>1.0.0</version>
+      <version>${swarm.test.version}</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
@@ -22,6 +23,17 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+  <profiles>
+    <profile>
+      <id>internal-registry</id>
+      <activation><property><name>swarm.test.repository.url</name></property></activation>
+      <repositories><repository>
+        <id>internal-maven</id><url>${swarm.test.repository.url}</url>
+        <releases><enabled>true</enabled><checksumPolicy>fail</checksumPolicy></releases>
+        <snapshots><enabled>false</enabled></snapshots>
+      </repository></repositories>
+    </profile>
+  </profiles>
   <build><plugins>
     <plugin>
       <groupId>org.apache.maven.plugins</groupId>

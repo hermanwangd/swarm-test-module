@@ -1,0 +1,43 @@
+{
+  "status": "approved",
+  "reviewer": "codex:/root/shipping_review",
+  "review_ref": "local-click-3884",
+  "context_sha256": "890df1971e9cd9b2c9027b7428cc9377c8c08b1ab1f7325df814082367d81185",
+  "design_sha256": "eac41c5329d07d6cb47bb9ff39efd6f0bf738a7dedf76b01f0677cbca57028de",
+  "runtime": {
+    "java": {
+      "path": "/workspace/.toolchains/temurin-17/bin/java",
+      "sha256": "a2195ae9f8a91b82f53df7e1d1b9a650937ebbabbf67d0240c6378b4fbd9990b"
+    },
+    "module": {
+      "path": "/workspace/published-artifacts/swarm-product-test-1.0.0-cli.jar",
+      "sha256": "3d8e46807562bc44c11be9d6ff061d6a9dbe8ed30d77c8ad46810ffd33e04ae3"
+    },
+    "framework": {
+      "path": "/workspace/framework/target/spec-driven-auto-regression-0.3.2.jar",
+      "sha256": "cccbcbe2879fd2bf2f66eaf5ac60468903cf7a509076efdb5f661f09cbf898dd"
+    }
+  },
+  "subjects": [
+    {
+      "path": "/usr/bin/python3.13",
+      "sha256": "17b78e0a93175e86f9ac03141924fd7a7f0c0c52e66b34bfa0de20ffef989df1"
+    },
+    {
+      "path": "/workspace/external-validation/c53d3732b98c764932e146c007146ad402acb229.zip",
+      "sha256": "3f062560531d1d9dc5d2cedfbf88bc0a99831c32c79b085a08ea85c7ac3c5660"
+    },
+    {
+      "path": "/workspace/external-validation/probe.py",
+      "sha256": "dd8e41bdf8b8c0333fae08ecc4db88aa668c63fc9b565aa62e1e7f9d5a8f2119"
+    },
+    {
+      "path": "/workspace/swarm-test-module/skills/project-test/scripts/project_test.py",
+      "sha256": "e5a0472b18c44f9571055de69938335a747a6263d1eaa17b0c65850e3087f230"
+    }
+  ],
+  "handoffs": {
+    "CLICK-sequence": "160fb5a8bfcb5a5937aa5dd6300f4d96ac1eb0a19fa3106def0413a3ff28c034",
+    "CLICK-empty": "1750b4390a3b947c258035a7fadb0eaf1c4c1e9e2c94a4c3b4d626ec45dacf9a"
+  }
+}

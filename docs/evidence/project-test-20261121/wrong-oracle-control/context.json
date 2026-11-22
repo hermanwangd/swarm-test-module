@@ -1,0 +1,55 @@
+{
+  "schema": "project-test-context.v1",
+  "revision": "8d2e9447d6dd8a736dfdf109efd18f3834fcbe16",
+  "base": "39263d79596a14b4a02b946be69cf58122c19c4f",
+  "sources": [
+    {
+      "id": "bdd:docs/cli-entry.feature",
+      "kind": "bdd",
+      "origin": "8d2e9447d6dd8a736dfdf109efd18f3834fcbe16:docs/cli-entry.feature",
+      "snapshot": "sources/0.txt",
+      "sha256": "e507cc96fbe0aa383d4ffe61ab3451b8ce0744ce5893e423e658c399c80c7bcd",
+      "lines": 19
+    },
+    {
+      "id": "ac:docs/CLI-AC.md",
+      "kind": "ac",
+      "origin": "8d2e9447d6dd8a736dfdf109efd18f3834fcbe16:docs/CLI-AC.md",
+      "snapshot": "sources/1.txt",
+      "sha256": "b440b879550b137ccf24ae2d5fbcb3fd2c63f277e7bd65f69c6ef7ee88ba2543",
+      "lines": 17
+    },
+    {
+      "id": "code:src/main/java/com/featuredeliveryintelligence/fdi/producttest/ProductTestCli.java",
+      "kind": "code",
+      "origin": "8d2e9447d6dd8a736dfdf109efd18f3834fcbe16:src/main/java/com/featuredeliveryintelligence/fdi/producttest/ProductTestCli.java",
+      "snapshot": "sources/2.txt",
+      "sha256": "5f869e6f521afeec900fbc034568c22ca21c4fdfce777c887aa195912bace130",
+      "lines": 55
+    },
+    {
+      "id": "code:src/main/java/com/featuredeliveryintelligence/fdi/producttest/Json.java",
+      "kind": "code",
+      "origin": "8d2e9447d6dd8a736dfdf109efd18f3834fcbe16:src/main/java/com/featuredeliveryintelligence/fdi/producttest/Json.java",
+      "snapshot": "sources/3.txt",
+      "sha256": "1a0bcf2306a08fa99a5677c986327c8572d1273fbfd8180c7f0132342da968cb",
+      "lines": 57
+    },
+    {
+      "id": "pr:snapshot",
+      "kind": "pr",
+      "origin": "https://github.com/hermanwangd/swarm-test-module/pull/1",
+      "snapshot": "sources/4.txt",
+      "sha256": "0427a2a932da417a76e767c4a929f8b6673e9052377e41e57733ea0e33c8ccc6",
+      "lines": 7
+    },
+    {
+      "id": "pr:diff",
+      "kind": "pr",
+      "origin": "39263d79596a14b4a02b946be69cf58122c19c4f..8d2e9447d6dd8a736dfdf109efd18f3834fcbe16",
+      "snapshot": "sources/5.txt",
+      "sha256": "78292a794d28201ce59a57041486b90b464a378eb0d62bade786a8d20371f46b",
+      "lines": 1726
+    }
+  ]
+}

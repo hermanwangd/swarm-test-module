@@ -1,0 +1,119 @@
+{
+  "schema": "project-test-report.v1",
+  "revision": "8d2e9447d6dd8a736dfdf109efd18f3834fcbe16",
+  "review_sha256": "5afea420e4a0f1e98a8dbbfe92715004d8537c498537f9e90d442295c3a197b3",
+  "claim": "AGENT_AUTHORED_LOCAL_FRAMEWORK_EXECUTION",
+  "release_eligible": false,
+  "cases": [
+    {
+      "id": "TC-CLI-EMPTY",
+      "status": "FAIL",
+      "command": [
+        "/workspace/.toolchains/temurin-17/bin/java",
+        "-Xmx512m",
+        "-XX:MaxMetaspaceSize=256m",
+        "-jar",
+        "/workspace/published-artifacts/swarm-product-test-1.0.0-cli.jar",
+        "product-test",
+        "run",
+        "--request",
+        "/workspace/ship-evidence/project-workflow-control/run-1/TC-CLI-EMPTY/request.json"
+      ],
+      "expected": "CONTROL ONLY: deliberately wrong exit_code = 99; actual contract remains exit 2",
+      "exit_code": 1,
+      "outcome": "COMPLETED",
+      "verdict": "failed",
+      "receipt": "/workspace/ship-evidence/project-workflow-control/run-1/TC-CLI-EMPTY/receipt.json",
+      "receipt_sha256": "7f724d50f6138bb58467485e05f8056fc428cc7479b1d317dd00066c1bdfe08f",
+      "result": {
+        "path": "/workspace/ship-evidence/project-workflow-control/run-1/TC-CLI-EMPTY/outputs/product-test-504b7c3a-86ae-4a69-9bb0-1e681766839a-8890544641013345755/target/regression/TC-CLI-EMPTY/BATCH-STANDALONE-20261121095430810-1/RUN-V03-7d2dbe61-0aad-4e5b-897b-addcea37563f/result.json",
+        "sha256": "3f6bdeb8a5fd8a61aeed63eee180b30c8e2aaf0b413249013b21663a5f51e1a8"
+      }
+    },
+    {
+      "id": "TC-CLI-EXTRA",
+      "status": "PASS",
+      "command": [
+        "/workspace/.toolchains/temurin-17/bin/java",
+        "-Xmx512m",
+        "-XX:MaxMetaspaceSize=256m",
+        "-jar",
+        "/workspace/published-artifacts/swarm-product-test-1.0.0-cli.jar",
+        "product-test",
+        "run",
+        "--request",
+        "/workspace/ship-evidence/project-workflow-control/run-1/TC-CLI-EXTRA/request.json"
+      ],
+      "expected": "exit_code = 2; stdout empty; stderr = 'product-test: usage: product-test run --request <request.json>\\n'",
+      "exit_code": 0,
+      "outcome": "COMPLETED",
+      "verdict": "passed",
+      "receipt": "/workspace/ship-evidence/project-workflow-control/run-1/TC-CLI-EXTRA/receipt.json",
+      "receipt_sha256": "2632da562814d8171177b443a8e85865f7aa995636a1df32ca913f9647988543",
+      "result": {
+        "path": "/workspace/ship-evidence/project-workflow-control/run-1/TC-CLI-EXTRA/outputs/product-test-e8749a87-ec7c-4e27-925c-40b684c5c34e-3156651798517229074/target/regression/TC-CLI-EXTRA/BATCH-STANDALONE-20261121095438355-1/RUN-V03-b548c59d-8d4f-4873-a05b-0c512aa3dd07/result.json",
+        "sha256": "62ff682f16b371080bb5b289ad457c8d1e7f7ad643488e31d3fd839f5136eac8"
+      }
+    },
+    {
+      "id": "TC-CLI-NO-BINDING",
+      "status": "PASS",
+      "command": [
+        "/workspace/.toolchains/temurin-17/bin/java",
+        "-Xmx512m",
+        "-XX:MaxMetaspaceSize=256m",
+        "-jar",
+        "/workspace/published-artifacts/swarm-product-test-1.0.0-cli.jar",
+        "product-test",
+        "run",
+        "--request",
+        "/workspace/ship-evidence/project-workflow-control/run-1/TC-CLI-NO-BINDING/request.json"
+      ],
+      "expected": "exit_code = 2; stdout empty; stderr = 'product-test: Missing deployment binding: SWARM_PRODUCT_TEST_FRAMEWORK_JAR\\n'",
+      "exit_code": 0,
+      "outcome": "COMPLETED",
+      "verdict": "passed",
+      "receipt": "/workspace/ship-evidence/project-workflow-control/run-1/TC-CLI-NO-BINDING/receipt.json",
+      "receipt_sha256": "e9102b5ff5c39cb7444587cc103d3a8500bf8ba2262d3df671717bcf246e40ed",
+      "result": {
+        "path": "/workspace/ship-evidence/project-workflow-control/run-1/TC-CLI-NO-BINDING/outputs/product-test-cfb6d6dc-8fa7-4fe2-ba80-2ea9b50a1e57-277974921452762438/target/regression/TC-CLI-NO-BINDING/BATCH-STANDALONE-20261121095446423-1/RUN-V03-27714204-d9b7-47c3-8d8d-ecd08ecaf9ab/result.json",
+        "sha256": "325a99fca8c254bd4845ed8f28ceccd8ad8a01477c66c209a13c6e659846d459"
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "AC-CLI-1",
+      "status": "FAIL",
+      "cases": [
+        "TC-CLI-EMPTY",
+        "TC-CLI-EXTRA"
+      ],
+      "gap": null,
+      "citations": [
+        {
+          "source": "ac:docs/CLI-AC.md",
+          "start": 7,
+          "end": 9
+        }
+      ]
+    },
+    {
+      "requirement": "AC-CLI-2",
+      "status": "PASS",
+      "cases": [
+        "TC-CLI-NO-BINDING"
+      ],
+      "gap": null,
+      "citations": [
+        {
+          "source": "ac:docs/CLI-AC.md",
+          "start": 10,
+          "end": 12
+        }
+      ]
+    }
+  ],
+  "status": "INCOMPLETE",
+  "coverage_note": "Coverage of the reviewed AC inventory; not code coverage or proof that the inventory is exhaustive."
+}

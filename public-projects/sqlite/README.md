@@ -33,7 +33,7 @@ python3 -B scripts/public-cli-project.py fetch \
 
 Only the URLs in the lock are fetched. Redirects, encrypted or unexpected archive entries, symlinks, traversal and expanded sources over 20 MiB are rejected. The harness checks a combined 200 MiB cache/evidence budget and a minimum 5 GiB free reserve. Downloads or failed runs are retained for inspection; it never deletes existing cache or evidence directories.
 
-After building both framework and module as described in the [reproduction guide](https://github.com/hermanwangd/Auto_Regression_Test_Framework/blob/plug-in-module/docs/09-operations/product-testing-reproduction.md), prepare exact reviewed inputs. The harness reads the reviewed provider contract and review template from the separate **framework source checkout**: pass `--framework-source /absolute/framework-checkout` (or set `SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE`). Supply the independently selected hashes of the actual JARs and a JDK 17 location:
+After building both framework and module as described in the [reproduction guide](https://github.com/hermanwangd/Auto_Regression_Test_Framework/blob/plug-in-module/docs/09-operations/product-testing-reproduction.md), prepare exact reviewed inputs. The harness uses the pinned contract and review template in `test-support/framework/` by default. To use the same reviewed inputs from a separate framework checkout, pass `--framework-source /absolute/framework-checkout` or set `SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE`. Supply the independently selected hashes of the actual JARs and a JDK 17 location:
 
 ```sh
 python3 -B scripts/public-cli-project.py prepare \

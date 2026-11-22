@@ -1,0 +1,109 @@
+{
+  "revision": "c53d3732b98c764932e146c007146ad402acb229",
+  "runner": [
+    "uv",
+    "run",
+    "--locked",
+    "--no-default-groups",
+    "--group",
+    "dev",
+    "tox",
+    "run"
+  ],
+  "environment": "py3.12",
+  "plan_sha256": "c9ff275fcba0e7bc991c4d1cce64bbde5c3c5f866b694bda82d55ec8ed421edf",
+  "runs": [
+    {
+      "origin": "existing",
+      "path": "tests/test_options.py",
+      "function": "test_show_envvar_empty",
+      "requirements": [
+        "AC-empty"
+      ],
+      "assertion": "Empty explicit names leave the help line identical to an absent name, including prefix fallback.",
+      "exit_code": 0,
+      "log": "0.log",
+      "log_sha256": "ccf6c6c1f13d27a19798d0a161f5a4ca725ed848230effaa5d3b5bad28485732",
+      "status": "PASS",
+      "tests": 6,
+      "skipped": 0,
+      "failed": 0,
+      "junit": "0.xml",
+      "junit_sha256": "6259ea4be29a3bcc200ebd7996ac76049372e13a31aa136b144a4433c860d7e7"
+    },
+    {
+      "origin": "existing",
+      "path": "tests/test_options.py",
+      "function": "test_missing_envvar_sequence",
+      "requirements": [
+        "AC-sequence",
+        "AC-empty"
+      ],
+      "assertion": "Missing-option errors render the expected sequence and omit empty names.",
+      "exit_code": 0,
+      "log": "1.log",
+      "log_sha256": "0496de876902f3ed7239c05d8af054d5422b8710bf1afcc88080ae0d6d40d73a",
+      "status": "PASS",
+      "tests": 6,
+      "skipped": 0,
+      "failed": 0,
+      "junit": "1.xml",
+      "junit_sha256": "9e7268bf3fdd4a5ddd407b3c65761cf38a8c9b1bdebc53305f0387f411f67a05"
+    },
+    {
+      "origin": "added",
+      "path": "test_envvar_hint.py",
+      "function": "test_invalid_value_lists_individual_envvars",
+      "requirements": [
+        "AC-sequence"
+      ],
+      "assertion": "Invalid-value diagnostics list each variable name as specified in the PR body.",
+      "sha256": "a7416ac1585fa3b2e89c41d358629cc7183da9a39d815f57207c70e0bbcf4b72",
+      "exit_code": 0,
+      "log": "2.log",
+      "log_sha256": "cc36b9f21ab591c86093dbbba2b56a5fbe998a29ec6542be1374387c56ed6a9e",
+      "status": "PASS",
+      "tests": 1,
+      "skipped": 0,
+      "failed": 0,
+      "junit": "2.xml",
+      "junit_sha256": "711b606a41994ab7810bdf9e3914e6c0ff364b40b8411ce1c2a37b908a7f4a2e"
+    },
+    {
+      "origin": "added",
+      "path": "test_envvar_hint.py",
+      "function": "test_invalid_value_omits_empty_envvar_hint",
+      "requirements": [
+        "AC-empty"
+      ],
+      "assertion": "The invalid-value diagnostic omits the env-var hint for absent and empty names.",
+      "sha256": "a7416ac1585fa3b2e89c41d358629cc7183da9a39d815f57207c70e0bbcf4b72",
+      "exit_code": 0,
+      "log": "3.log",
+      "log_sha256": "a2e05c78b62f1b98ff644fb164c1cccc71f4e44257b582b694e3b4583843ba19",
+      "status": "PASS",
+      "tests": 1,
+      "skipped": 0,
+      "failed": 0,
+      "junit": "3.xml",
+      "junit_sha256": "ba4ee14bc29a2ef86dfc083235fe3e80e7aa53cfbb4a7b5f684bbe89044356d7"
+    },
+    {
+      "origin": "regression",
+      "exit_code": 0,
+      "log": "4.log",
+      "log_sha256": "e7f814fe371ef52c883eecd1a9cd1242d8a66c3d53bbefc917ae2334bfcd46ff",
+      "status": "PASS",
+      "tests": 2136,
+      "skipped": 25,
+      "failed": 0,
+      "junit": "4.xml",
+      "junit_sha256": "a4345e975885b53da9c74e6e2f3f845f60ca2b81c41790cf75f98862322eff66"
+    }
+  ],
+  "status": "PASS",
+  "requirements": {
+    "AC-empty": "PASS",
+    "AC-sequence": "PASS"
+  }
+}

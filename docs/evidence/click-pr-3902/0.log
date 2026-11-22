@@ -1,0 +1,26 @@
+Using CPython 3.12.14 interpreter at: /opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3
+Creating virtual environment at: .venv
+   Building click @ file:///tmp/engcim-s06-8elrefpo/repo
+      Built click @ file:///tmp/engcim-s06-8elrefpo/repo
+warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+         If the cache and target directories are on different filesystems, hardlinking may not be supported.
+         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+Installed 17 packages in 328ms
+py3.12: venv> .venv/bin/uv venv -p cpython3.12 --allow-existing '--prompt=repo[py3.12]' --python-preference system /tmp/engcim-s06-8elrefpo/repo/.tox/py3.12
+py3.12: uv-sync> .venv/bin/uv sync --locked --python-preference system --no-default-groups --no-editable --reinstall-package click --group tests -p cpython3.12
+py3.12: commands[0]> pytest -v --tb=short --basetemp=/tmp/engcim-s06-8elrefpo/repo/.tox/py3.12/tmp tests/test_formatting.py::test_wrap_text_keeps_words_whole --junitxml=/workspace/external-validation/local-3902-head/0.xml
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.0.2, pluggy-1.6.0 -- /tmp/engcim-s06-8elrefpo/repo/.tox/py3.12/bin/python3
+cachedir: .tox/py3.12/.pytest_cache
+rootdir: /tmp/engcim-s06-8elrefpo/repo
+configfile: pyproject.toml
+collecting ... collected 3 items
+
+tests/test_formatting.py::test_wrap_text_keeps_words_whole[hyphenated-word] PASSED [ 33%]
+tests/test_formatting.py::test_wrap_text_keeps_words_whole[long-word] PASSED [ 66%]
+tests/test_formatting.py::test_wrap_text_keeps_words_whole[styled-long-word] PASSED [100%]
+
+--- generated xml file: /workspace/external-validation/local-3902-head/0.xml ---
+============================== 3 passed in 0.05s ===============================
+  py3.12: OK (2.10=setup[1.47]+cmd[0.63] seconds)
+  congratulations :) (2.17 seconds)

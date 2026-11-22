@@ -32,11 +32,25 @@ jobs:
       - name: Verify the existing standalone module tests
         run: mvn -B -ntp verify
 
+      - name: Verify standalone public CLI harness boundaries
+        run: python3 -B -m unittest discover -s scripts/tests -p test_public_cli_project.py -v
+
+      - name: Verify project sources, agent case traceability and execution gates
+        run: python3 -B -m unittest discover -s scripts/tests -p test_project_test.py -v
+
       - name: Install a pinned local Maven artifact for consumer testing
         run: mvn -B -ntp -DskipTests install
 
       - name: Clean external Swarm consumer import and ServiceLoader smoke
         run: mvn -B -ntp -f examples/company-swarm-consumer/pom.xml test
+
+      - name: Verify Maven transport with a new consumer and empty cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn -B -ntp -DskipTests deploy "-DaltDeploymentRepository=transport-test::file://$RUNNER_TEMP/module-registry"
+          digest=$(sha256sum target/swarm-product-test-1.0.0.jar | cut -d ' ' -f 1)
+          bash scripts/verify-registry-consumer.sh "file://$RUNNER_TEMP/module-registry" "$digest" "$RUNNER_TEMP/fresh-consumer"
 
       - name: Check complete distributions and executable CLI startup
         shell: bash
@@ -72,3 +86,5 @@ jobs:
             target/surefire-reports/
             target/site/jacoco/
             examples/company-swarm-consumer/target/surefire-reports/
+            ${{ runner.temp }}/fresh-consumer/consumer-test.xml
+            ${{ runner.temp }}/fresh-consumer/resolved-checksum.sha256

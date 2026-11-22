@@ -1,5 +1,10 @@
 # Codex Work handoff — finish and ship standalone Test Module
 
+**Owner update, 2026-11-21:** deliver to `hermanwangd/swarm-test-module` as a
+public repository. This supersedes this original handoff's private-repository
+condition. All evidence, history isolation and runtime acceptance conditions
+remain applicable.
+
 ## Sources (authoritative)
 - Module extraction candidate: `hermanwangd/Auto_Regression_Test_Framework`, branch `shipping/test-module-standalone-20261121`, PR #17.
 - Original implementation: same repository, branch `plug-in-module`, `integrations/swarm-product-test/`, commit `597064a9c75c6323a164a06d050110e16d165aca`.
