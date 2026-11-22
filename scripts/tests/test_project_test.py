@@ -191,6 +191,20 @@ class ProjectTest(unittest.TestCase):
         self.assertFalse(summary["coder_handoff"]["required"])
         self.assertEqual("not_applicable", summary["coder_handoff"]["root_cause"])
 
+    def test_markdown_summary_is_human_readable_and_contains_coder_handoff(self):
+        inventory = FLOW.read(self.repo / "test-inventory.json")["entries"]
+        cases = [{"id": "FAIL-1", "status": "FAIL", "expected": "expected", "reason": "ASSERTION_FAILED",
+                  "receipt": "receipt.json", "result": {"path": "result.json", "sha256": "a" * 64},
+                  "receipt_sha256": "b" * 64}]
+        summary = FLOW.report_summary(cases, [{"status": "FAIL"}], inventory,
+                                      {"status": "COLLECTED", "lines": {"covered": 1, "total": 2}}, "INCOMPLETE")
+        markdown = FLOW.markdown_summary(summary)
+        for expected in ("# Test report summary", "Overall status: **INCOMPLETE**",
+                         "| Test cases | 1 | 0 | 1 | 0 | 0 |", "| Requirements | 1 | 0 | 1 | 0 | 0 |",
+                         "Coder handoff", "Assignee: **coder**", "product_or_test_oracle_needs_triage",
+                         "receipt.json", "Rerun from a fresh output directory after the fix and review"):
+            self.assertIn(expected, markdown)
+
     def test_pull_request_diff_excludes_base_branch_only_changes(self):
         original = self.revision
         (self.repo / "base-only.txt").write_text("Unrelated change on the base branch\n")
