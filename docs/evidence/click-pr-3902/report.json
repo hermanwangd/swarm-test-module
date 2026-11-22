@@ -1,0 +1,146 @@
+{
+  "revision": "7996a89c5a4ce1c451e2e1c9c5a00eb0c844d4ce",
+  "runner": [
+    "uv",
+    "run",
+    "--locked",
+    "--no-default-groups",
+    "--group",
+    "dev",
+    "tox",
+    "run"
+  ],
+  "environment": "py3.12",
+  "plan_sha256": "19f9c87f4de3d71a98b5940daa3b9ea41c1705d4916d0db5b6166c103270fe0d",
+  "runs": [
+    {
+      "origin": "existing",
+      "path": "tests/test_formatting.py",
+      "function": "test_wrap_text_keeps_words_whole",
+      "requirements": [
+        "words"
+      ],
+      "assertion": "Compare wrapped lines including hyphenated, long and styled words.",
+      "exit_code": 0,
+      "log": "0.log",
+      "log_sha256": "9389095c8ff0e33aea8c3747530c98c715533cd0308b734ec5cebd1b2081ee6f",
+      "status": "PASS",
+      "tests": 3,
+      "skipped": 0,
+      "failed": 0,
+      "junit": "0.xml",
+      "junit_sha256": "a83f532feb56ee127db0bee6511802fd80ca25dd9fd755a71b707652b196a246"
+    },
+    {
+      "origin": "existing",
+      "path": "tests/test_formatting.py",
+      "function": "test_help_formatter_write_usage_keeps_arguments_whole",
+      "requirements": [
+        "usage"
+      ],
+      "assertion": "Compare every usage line including over-width arguments.",
+      "exit_code": 0,
+      "log": "1.log",
+      "log_sha256": "580ae231df562aad4e8434e046053cce6827da0a68634d6e38ec30162753ce9e",
+      "status": "PASS",
+      "tests": 3,
+      "skipped": 0,
+      "failed": 0,
+      "junit": "1.xml",
+      "junit_sha256": "c284f955f9eb088efcd449e027fc5e7aef2c188126100d6a75942adcbe9f1e6f"
+    },
+    {
+      "origin": "existing",
+      "path": "tests/test_formatting.py",
+      "function": "test_help_formatter_keeps_words_whole",
+      "requirements": [
+        "words"
+      ],
+      "assertion": "Compare all original words across the formatter methods.",
+      "exit_code": 0,
+      "log": "2.log",
+      "log_sha256": "259caae6e4de34f69b711df06c11642987abeadbc1949a6ac0b802a0f464c06b",
+      "status": "PASS",
+      "tests": 3,
+      "skipped": 0,
+      "failed": 0,
+      "junit": "2.xml",
+      "junit_sha256": "d0199d145ce0b471d68269b4c0be140a92ce7c705faceeff3cc0a307565109fb"
+    },
+    {
+      "origin": "added",
+      "path": "test_local_help.py",
+      "function": "test_custom_metavar_survives_narrow_help",
+      "requirements": [
+        "usage"
+      ],
+      "assertion": "The actual --help command succeeds and displays the complete custom metavar as one token.",
+      "sha256": "ae2d33862a0423634b75d2f5cd12a776fb43201565010cc9b856b17cabaf8590",
+      "exit_code": 0,
+      "log": "3.log",
+      "log_sha256": "1f39d8e4d5270bf2ed16d85e0e2ffd1419d2772bbeeb2ed929e5a91664be1b04",
+      "status": "PASS",
+      "tests": 1,
+      "skipped": 0,
+      "failed": 0,
+      "junit": "3.xml",
+      "junit_sha256": "57d58e9b764feb7a0777de9e4f20dc6f57c36325977adef2dd1ebd15a2d1af84"
+    },
+    {
+      "origin": "regression",
+      "exit_code": 0,
+      "log": "4.log",
+      "log_sha256": "b608219aa705ed1639dd8f960522a83d0d136b9a3c203970f78e9b047cd4e86b",
+      "status": "PASS",
+      "tests": 2651,
+      "skipped": 25,
+      "failed": 0,
+      "junit": "4.xml",
+      "junit_sha256": "d3813774882c4ecee0812f5577a04fac729a4c8b275544254d16a3d8f01449b9"
+    }
+  ],
+  "status": "PASS",
+  "execution": {
+    "target": {
+      "kind": "product",
+      "identity": "https://github.com/pallets/click/pull/3902",
+      "revision": "7996a89c5a4ce1c451e2e1c9c5a00eb0c844d4ce"
+    },
+    "stage": "LOCAL",
+    "evidence_source": "local tox JUnit and logs",
+    "acceptance_criteria": {
+      "words": {
+        "LOCAL": {
+          "applicable": true,
+          "status": "PASS"
+        },
+        "CI": {
+          "applicable": null,
+          "status": "NOT_VERIFIED"
+        },
+        "POST_CD_SIT": {
+          "applicable": null,
+          "status": "NOT_VERIFIED"
+        }
+      },
+      "usage": {
+        "LOCAL": {
+          "applicable": true,
+          "status": "PASS"
+        },
+        "CI": {
+          "applicable": null,
+          "status": "NOT_VERIFIED"
+        },
+        "POST_CD_SIT": {
+          "applicable": null,
+          "status": "NOT_VERIFIED"
+        }
+      }
+    }
+  },
+  "requirements": {
+    "words": "PASS",
+    "usage": "PASS"
+  }
+}
