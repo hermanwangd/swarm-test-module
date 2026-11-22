@@ -9,6 +9,12 @@ import re
 import subprocess
 import zipfile
 
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--swarm-root", type=Path, required=True, help="Read-only Git checkout, containing engcim-swarm/")
 parser.add_argument("--java-home", type=Path, default=Path(os.environ.get("JAVA_HOME", "/usr")))
@@ -32,16 +38,16 @@ pins = {
     "src/test/java/com/featuredeliveryintelligence/fdi/orchestration/MissionFlowTests.java": "d24dd6c7b6151e18bc8516ee84ac6e58630b7b0b8b0b6b42336f00569fe07d97",
 }
 for name, digest in pins.items():
-    assert sha(source / name) == digest, f"Inspected Swarm source pin changed: {name}"
+    require(sha(source / name) == digest, f"Inspected Swarm source pin changed: {name}")
 base = subprocess.run(["git", "-C", str(args.swarm_root), "rev-parse", "HEAD"], text=True, capture_output=True, check=True).stdout.strip()
-assert base == "fe80374f740ed3c604836431daca5c32e92cf844", "Swarm Git base changed"
+require(base == "fe80374f740ed3c604836431daca5c32e92cf844", "Swarm Git base changed")
 
 entry = source / "src/main/java/com/featuredeliveryintelligence/fdi/application/FdiApplication.java"
 overlay = build / "src/com/featuredeliveryintelligence/fdi/application/FdiApplication.java"
 overlay.parent.mkdir(parents=True, exist_ok=True)
 original = entry.read_text()
 needle = "        if (Dev204Cli.handles(args)) return;"
-assert original.count(needle) == 1
+require(original.count(needle) == 1, "Swarm entry-point patch anchor is not unique")
 overlay.write_text(original.replace(needle,
     '        if (args.length > 0 && "product-test".equals(args[0]))\n'
     '            if (com.featuredeliveryintelligence.fdi.producttest.ProductTestCli.handles(args)) return;\n' + needle))
@@ -64,7 +70,7 @@ compile_result = subprocess.run([javac, "-J-Xmx512m", "--release", "17", "-verbo
     "-sourcepath", str(source / "src/main/java"), "-d", str(classes), str(overlay), str(harness),
     str(source / "src/test/java/com/featuredeliveryintelligence/fdi/orchestration/MissionFlowTests.java")], text=True, capture_output=True, timeout=60)
 (build / "compile.log").write_text(compile_result.stdout + compile_result.stderr)
-assert compile_result.returncode == 0, f"Host compilation failed; see {build / 'compile.log'}"
+require(compile_result.returncode == 0, f"Host compilation failed; see {build / 'compile.log'}")
 compiled_sources = set(re.findall(r"SimpleFileObject\[([^\]]+\.java)\]", compile_result.stderr))
 for directory, relative in re.findall(r"DirectoryFileObject\[([^\]:]+):([^\]]+\.java)\]", compile_result.stderr):
     compiled_sources.add(str(Path(directory) / relative))
@@ -81,7 +87,7 @@ def run(name, main, arguments, include_module, extra_jars=()):
                             text=True, capture_output=True, timeout=30, cwd=build)
     (build / f"{name}.stdout.log").write_text(result.stdout)
     (build / f"{name}.stderr.log").write_text(result.stderr)
-    assert result.returncode == 0, f"Host check {name} failed; see {build}"
+    require(result.returncode == 0, f"Host check {name} failed; see {build}")
     return result.stdout
 
 mission_output = run("mission-distinction", "HostContractHarness", [], False)
@@ -93,9 +99,9 @@ entry_name = "com.featuredeliveryintelligence.fdi.application.FdiApplication"
 without = run("dev204-module-absent", entry_name, ["dev204-prepare", "--scenario-pack", str(scenario), "--output-dir", str(build / "packets-absent")], False)
 provider_jar = module / "target/swarm-product-test-1.0.0-provider.jar"
 with_module = run("dev204-module-present", entry_name, ["dev204-prepare", "--scenario-pack", str(scenario), "--output-dir", str(build / "packets-present")], True, [provider_jar])
-assert json.loads(without) == json.loads(with_module)
-assert json.loads(without)["claim_boundary"] == "PACKETS_PREPARED_NOT_EXECUTED"
-assert json.loads(without)["packet_count"] == 2
+require(json.loads(without) == json.loads(with_module), "Dev204 behavior changed when the module was present")
+require(json.loads(without)["claim_boundary"] == "PACKETS_PREPARED_NOT_EXECUTED", "Unexpected Dev204 claim boundary")
+require(json.loads(without)["packet_count"] == 2, "Unexpected Dev204 packet count")
 run("spring-module-absent", entry_name, ["--spring.main.web-application-type=none", "--spring.main.banner-mode=off"], False)
 module_harness = build / "src/HostModuleHarness.java"
 module_harness.write_text('''
@@ -142,7 +148,7 @@ run("provider-default", "HostModuleHarness", ["default"], True, [provider_jar])
 run("provider-replacement", "HostModuleHarness", ["replacement"], True, [replacement_jar])
 run("provider-duplicate", "HostModuleHarness", ["duplicate"], True, [provider_jar, replacement_jar])
 for name, digest in {**pins, **source_digests}.items():
-    assert sha(source / name) == digest, f"Original Swarm source changed during compatibility verification: {name}"
+    require(sha(source / name) == digest, f"Original Swarm source changed during compatibility verification: {name}")
 evidence = {"status": "passed", "claim_boundary": "LOCAL_SOURCE_OVERLAY_NOT_INSTALLED_SWARM_ACCEPTANCE",
             "swarm_base": base, "source_digests": source_digests, "entry_source_sha256": pins[next(iter(pins))],
             "overlay_sha256": sha(overlay), "compiled_source_count": len(source_digests),

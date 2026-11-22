@@ -19,8 +19,9 @@ import urllib.request
 import zipfile
 
 MODULE = Path(__file__).resolve().parents[1]
-REPO = MODULE
 FIXTURES = MODULE / "public-projects/sqlite"
+CONTRACT = "docs/02-architecture/contracts/provider-contracts/cli_process_v0_3.yaml"
+REVIEW_TEMPLATE = "samples/41-product-testing/reviewed_local/review-input.json"
 BUDGET = 200 * 1024**2
 RESERVE = 5 * 1024**3
 CLAIM = "LOCAL_CLI_INTEGRATION_NOT_SHARED_SIT_OR_RELEASE_ACCEPTANCE"
@@ -47,6 +48,30 @@ def write(path, value):
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def framework_input(source, relative):
+    if source == MODULE / "test-support/framework":
+        return source / Path(relative).name
+    return source / relative
+
+
+def framework_source(args=None):
+    """Prefer an explicit checkout, then the environment, bundled inputs, or the legacy tree."""
+    explicit = getattr(args, "framework_source", None) if args is not None else None
+    candidate = explicit or os.environ.get("SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE")
+    if candidate:
+        root = Path(candidate).resolve(strict=True)
+    elif (MODULE / "test-support/framework").is_dir():
+        root = MODULE / "test-support/framework"
+    else:
+        legacy = MODULE.parents[1]
+        require((legacy / CONTRACT).is_file() and (legacy / REVIEW_TEMPLATE).is_file(),
+                "Framework source root required: pass --framework-source or set SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE")
+        root = legacy
+    require(all(framework_input(root, path).is_file() for path in (CONTRACT, REVIEW_TEMPLATE)),
+            "Framework source root lacks the reviewed contract and review template: " + str(root))
+    return root
 
 
 def budget(*roots):
@@ -220,18 +245,20 @@ def policy(args):
     require(getattr(args, "policy_sha256", None) and sha(path) == args.policy_sha256, "CI policy differs from external reviewed pin")
     value = read(path)
     require(value["actor"] == "local-ci-policy" and value["claim"] == CLAIM, "Wrong local CI policy boundary")
-    required = {str(Path(__file__).resolve().relative_to(REPO)), str((FIXTURES / "asset-lock.json").relative_to(REPO)),
-                str((FIXTURES / "cases.json").relative_to(REPO)),
-                "test-support/framework/cli_process_v0_3.yaml",
-                "test-support/framework/review-input.json"}
-    require(set(value["reviewed_files"]) == required, "CI policy must pin the complete harness, lock, oracle and template set")
+    source = framework_source(args)
+    module_files = {"scripts/public-cli-project.py", "public-projects/sqlite/asset-lock.json",
+                    "public-projects/sqlite/cases.json"}
+    framework_files = {CONTRACT, REVIEW_TEMPLATE}
+    require(set(value["reviewed_files"]) == module_files | framework_files,
+            "CI policy must pin the complete harness, lock, oracle and template set")
     for relative, digest in value["reviewed_files"].items():
-        require(sha(REPO / relative) == digest, "Committed reviewed input changed: " + relative)
+        reviewed_path = framework_input(source, relative) if relative in framework_files else MODULE / relative
+        require(sha(reviewed_path) == digest, "Committed reviewed input changed: " + relative)
     return value
 
 
-def review_object(case, objects, build, actor, reference, reviewed_at, valid_until):
-    review = read(REPO / "test-support/framework/review-input.json")
+def review_object(source, case, objects, build, actor, reference, reviewed_at, valid_until):
+    review = read(framework_input(source, REVIEW_TEMPLATE))
     review.pop("suite_id", None)
     review.pop("profile", None)
     review.update(reviewed_by=actor, review_ref=reference, project_ref="public-sqlite-cli-validation",
@@ -260,6 +287,7 @@ def java(args):
 
 
 def prepare(args):
+    source = framework_source(args)
     authority = policy(args)
     require(authority or (args.reviewed_by and args.review_ref), "Supply review identity or the approved local CI policy")
     cache = args.cache_dir.resolve(strict=True)
@@ -282,8 +310,8 @@ def prepare(args):
             write(suite / relative, value)
         contract = suite / "contracts/cli_process_v0_3.yaml"
         contract.parent.mkdir()
-        shutil.copyfile(REPO / "test-support/framework/cli_process_v0_3.yaml", contract)
-        review = review_object(case, objects, build, "local-ci-policy" if authority else args.reviewed_by,
+        shutil.copyfile(framework_input(source, CONTRACT), contract)
+        review = review_object(source, case, objects, build, "local-ci-policy" if authority else args.reviewed_by,
                                "local-ci-policy://sqlite-v1" if authority else args.review_ref,
                                (now - timedelta(seconds=1)).isoformat().replace("+00:00", "Z"),
                                (now + timedelta(days=1)).isoformat().replace("+00:00", "Z"))
@@ -300,7 +328,7 @@ def prepare(args):
             "cache_dir": str(cache), "build": build, "framework_jar": str(jar), "framework_sha256": args.framework_sha256,
             "module_cli_sha256": args.module_sha256, "harness_sha256": sha(Path(__file__)),
             "asset_lock_sha256": sha(FIXTURES / "asset-lock.json"), "fixtures_sha256": sha(FIXTURES / "cases.json"),
-            "contract_sha256": sha(REPO / "test-support/framework/cli_process_v0_3.yaml"),
+            "contract_sha256": sha(framework_input(source, CONTRACT)),
             "policy_sha256": args.policy_sha256 if authority else None, "cases": prepared}
     write(evidence / "prepared-plan.json", plan)
     budget(cache, evidence)
@@ -311,6 +339,7 @@ def verify(args):
     evidence = args.evidence_dir.resolve(strict=True)
     plan_path = evidence / "prepared-plan.json"
     plan = read(plan_path)
+    source = framework_source(args)
     authority = policy(args)
     require(bool(authority) != bool(args.approval_file), "Select exactly one independent approval file or reviewed local CI policy")
     if authority:
@@ -328,7 +357,7 @@ def verify(args):
     require(plan["claim"] == CLAIM and plan["harness_sha256"] == sha(Path(__file__)), "Harness or claim changed")
     require(plan["asset_lock_sha256"] == sha(FIXTURES / "asset-lock.json") and
             plan["fixtures_sha256"] == sha(FIXTURES / "cases.json"), "Reviewed fixtures changed")
-    require(plan["contract_sha256"] == sha(REPO / "test-support/framework/cli_process_v0_3.yaml"),
+    require(plan["contract_sha256"] == sha(framework_input(source, CONTRACT)),
             "Source CLI contract differs from reviewed plan")
     cache = Path(plan["cache_dir"])
     require(checked_build(cache) == plan["build"], "Build provenance changed")
@@ -349,7 +378,7 @@ def verify(args):
         require(review["repository_revisions"] == {plan["build"]["repository"]: plan["build"]["revision"]}, "Product revision changed")
         if authority:
             require(review["reviewed_by"] == "local-ci-policy" and review["review_ref"] == "local-ci-policy://sqlite-v1", "Wrong CI actor")
-            expected_review = review_object(case, suite_objects(case, plan["build"]["binary"], plan["build"]["binary_sha256"]),
+            expected_review = review_object(source, case, suite_objects(case, plan["build"]["binary"], plan["build"]["binary_sha256"]),
                                            plan["build"], "local-ci-policy", "local-ci-policy://sqlite-v1",
                                            review["reviewed_at"], review["valid_until"])
             require(review == expected_review, "Generated review envelope differs from local CI policy")
@@ -435,6 +464,8 @@ def main():
     verify_parser = sub.add_parser("verify", help="Use existing smoke.py after separate runtime approval")
     verify_parser.add_argument("--approval-file", type=Path)
     for current in (prepare_parser, verify_parser):
+        current.add_argument("--framework-source", type=Path,
+                             help="Separate framework source checkout; falls back to SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE")
         current.add_argument("--evidence-dir", type=Path, required=True)
         current.add_argument("--java-home", type=Path, required=True)
         current.add_argument("--local-ci-policy", type=Path)

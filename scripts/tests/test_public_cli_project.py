@@ -2,6 +2,7 @@
 import importlib.util
 import io
 import json
+import os
 from argparse import Namespace
 from pathlib import Path
 import stat
@@ -117,15 +118,64 @@ class PublicCliProjectTest(unittest.TestCase):
             changed = dict(handoff, reviewed_by="unreviewed-human-claim")
             self.assertNotEqual(changed, HARNESS.expected_handoff(suite, review))
 
+    def framework_fixture(self, root):
+        for relative, text in ((HARNESS.CONTRACT, "synthetic reviewed contract"),
+                               (HARNESS.REVIEW_TEMPLATE, '{"reviewed_by": "template"}')):
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text)
+        return root
+
+    def test_framework_source_resolution_explicit_env_and_missing(self):
+        with tempfile.TemporaryDirectory() as name, patch.dict(os.environ, {}, clear=True):
+            root = self.framework_fixture(Path(name) / "framework")
+            self.assertEqual(root, HARNESS.framework_source(Namespace(framework_source=root)))
+            with patch.dict(os.environ, {"SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE": str(root)}):
+                self.assertEqual(root, HARNESS.framework_source(Namespace(framework_source=None)))
+            empty = Path(name) / "empty"
+            empty.mkdir()
+            with self.assertRaisesRegex(ValueError, "lacks the reviewed contract"):
+                HARNESS.framework_source(Namespace(framework_source=empty))
+            with patch.object(HARNESS, "MODULE", empty / "nested" / "module"):
+                with self.assertRaisesRegex(ValueError, "Framework source root required"):
+                    HARNESS.framework_source(Namespace(framework_source=None))
+
+    def test_bundled_framework_inputs_match_committed_policy(self):
+        policy_path = HARNESS.FIXTURES / "local-ci-policy.json"
+        args = Namespace(local_ci_policy=policy_path, policy_sha256=HARNESS.sha(policy_path), framework_source=None)
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(HARNESS.MODULE / "test-support/framework", HARNESS.framework_source(args))
+            self.assertEqual("local-ci-policy", HARNESS.policy(args)["actor"])
+
+    def test_policy_pins_module_and_framework_files_at_separate_roots(self):
+        with tempfile.TemporaryDirectory() as name:
+            source = self.framework_fixture(Path(name) / "framework")
+            reviewed = {relative: HARNESS.sha(HARNESS.MODULE / relative) for relative in
+                        ("scripts/public-cli-project.py", "public-projects/sqlite/asset-lock.json",
+                         "public-projects/sqlite/cases.json")}
+            reviewed.update({relative: HARNESS.sha(source / relative)
+                             for relative in (HARNESS.CONTRACT, HARNESS.REVIEW_TEMPLATE)})
+            policy_path = Path(name) / "policy.json"
+            args = Namespace(local_ci_policy=policy_path, policy_sha256=None, framework_source=source)
+            HARNESS.write(policy_path, {"actor": "local-ci-policy", "claim": HARNESS.CLAIM, "reviewed_files": reviewed})
+            args.policy_sha256 = HARNESS.sha(policy_path)
+            self.assertEqual("local-ci-policy", HARNESS.policy(args)["actor"])
+            reviewed["public-projects/sqlite/cases.json"] = "0" * 64
+            HARNESS.write(policy_path, {"actor": "local-ci-policy", "claim": HARNESS.CLAIM, "reviewed_files": reviewed})
+            args.policy_sha256 = HARNESS.sha(policy_path)
+            with self.assertRaisesRegex(ValueError, "Committed reviewed input changed"):
+                HARNESS.policy(args)
+
     def test_manual_approval_requires_exact_plan_and_handoff_pins_before_runtime(self):
         with tempfile.TemporaryDirectory() as name:
             evidence = Path(name)
+            source = self.framework_fixture(evidence / "framework-source")
             plan = {"claim": HARNESS.CLAIM, "cache_dir": str(evidence / "cache"),
                     "harness_sha256": HARNESS.sha(SCRIPT), "framework_sha256": "f" * 64,
                     "module_cli_sha256": "e" * 64, "build": {"binary_sha256": "d" * 64},
                     "asset_lock_sha256": HARNESS.sha(HARNESS.FIXTURES / "asset-lock.json"),
                     "fixtures_sha256": HARNESS.sha(HARNESS.FIXTURES / "cases.json"),
-                    "contract_sha256": HARNESS.sha(HARNESS.REPO / "test-support/framework/cli_process_v0_3.yaml"),
+                    "contract_sha256": HARNESS.sha(source / HARNESS.CONTRACT),
                     "cases": [{"name": "synthetic-case", "handoff_sha256": "1" * 64}]}
             HARNESS.write(evidence / "prepared-plan.json", plan)
             approval = {"status": "approved", "reviewer": "synthetic-test-reviewer", "review_ref": "synthetic://approval-test",
@@ -136,7 +186,7 @@ class PublicCliProjectTest(unittest.TestCase):
             approval_path = evidence / "approval.json"
             HARNESS.write(approval_path, approval)
             args = Namespace(evidence_dir=evidence, local_ci_policy=None, policy_sha256=None,
-                             approval_file=approval_path, java_home=evidence)
+                             approval_file=approval_path, java_home=evidence, framework_source=source)
             with patch.object(HARNESS, "checked_build", side_effect=ValueError("after approval boundary")) as runtime:
                 with self.assertRaisesRegex(ValueError, "Runtime approval pin differs: cases"):
                     HARNESS.verify(args)

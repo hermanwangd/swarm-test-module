@@ -16,6 +16,8 @@ and [actual design-to-execution evidence](docs/PROJECT-TEST-RESULTS-20261121.md)
 
 This Java 17 module invokes the existing Test Framework and imports its validated canonical result and evidence. It does not run test steps, implement assertions, query Cognee, create `VerificationResult`, fabricate a Multica reference, or close a mission. Swarm analysis/review roles remain responsible for requirements, cross-repository impact, proposals, review and interpretation. Existing framework assertions decide test verdicts.
 
+For the concrete TAA/gTAA layer mapping, known adapter exceptions and verification boundaries, see [TAA/gTAA alignment](docs/TAA-GTAA.md).
+
 The module supports **component / regression / local** using the framework's fake provider, and **integration / regression / local** for one native loopback HTTP read, pinned CLI command or owned loopback NATS publish/echo. System and acceptance levels, broader integration workflows, performance and security types, and SIT/preproduction/live stages are unsupported and rejected before launch. An optional local readiness/shared-state fixture exercises framework policy mechanics with the same local tuple. It does not prove real SIT or distributed ownership.
 
 `knowledge_mode: not_used` explicitly uses reviewed local artifacts without retrieval. `required` needs the existing governed Swarm selection receipt in the pinned handoff. Required mode cannot fall back to no knowledge. The native integration slice requires `not_used`; component tests retain both knowledge modes. The framework validates the existing receipt envelope and selected-source coverage; this module does not repeat governance or claim a deployed Cognee version. The local required-mode fixture is synthetic.
@@ -110,7 +112,7 @@ It records every compiled original source digest and checks that the originals r
 
 ## Packaged smoke
 
-Build the framework separately, then supply the approved artifact and handoff pins explicitly:
+Build the framework separately, then supply the approved artifact and handoff pins explicitly. The SQLite harness uses the bundled reviewed inputs in `test-support/framework/` by default. Both the SQLite and gRPC harnesses accept a separate framework source checkout through `--framework-source` or `SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE` and support the legacy in-tree layout.
 
 ```sh
 python3 scripts/smoke.py \
@@ -123,4 +125,4 @@ Repeat against the reviewed assertion-failure fixture with `--expect-verdict fai
 
 For a reviewed native suite, add `--test-level integration`. The default remains `component`. Use `--output-dir /absolute/new-evidence-directory` to retain evidence outside build output; existing directories are rejected to preserve earlier evidence. `smoke-evidence.json` records the actual executed CLI JAR hash (or host/provider pair with `--via-host`). Selecting integration does not relax the framework's reviewed profile validation or establish native Swarm agent execution.
 
-The frozen v2 local verification passed 42 module tests, eight source-overlay compatibility checks, seven packaged executions and two actual-entry provider rejection checks. The packaged cases cover local and required-knowledge PASS, a real assertion FAIL, readiness BLOCKED, replacement-provider PASS, and simultaneous same-suite PASS/FAIL with separate pinned handoffs and output directories. Missing and duplicate providers fail at the real `FdiApplication` entry before any framework output directory is created. All seven requests and receipts validate against the local JSON contracts. Compact receipts, commands and hashes are retained in the delivery's `evidence-v2/packaged/swarm-manifest.json`; the framework JAR SHA-256 for this verification is `fa97ffc806cb68c72b96086adb82d2c730911f5b10bece93839da282ff1bb7fd`.
+The frozen v2 local verification passed 42 module tests (a pre-extraction count; the standalone suite now runs over 400 tests), eight source-overlay compatibility checks, seven packaged executions and two actual-entry provider rejection checks. The packaged cases cover local and required-knowledge PASS, a real assertion FAIL, readiness BLOCKED, replacement-provider PASS, and simultaneous same-suite PASS/FAIL with separate pinned handoffs and output directories. Missing and duplicate providers fail at the real `FdiApplication` entry before any framework output directory is created. All seven requests and receipts validate against the local JSON contracts. Compact receipts, commands and hashes are retained in the delivery's `evidence-v2/packaged/swarm-manifest.json`; the framework JAR SHA-256 for this verification is `fa97ffc806cb68c72b96086adb82d2c730911f5b10bece93839da282ff1bb7fd`.
