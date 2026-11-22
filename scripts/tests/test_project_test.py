@@ -162,6 +162,35 @@ class ProjectTest(unittest.TestCase):
         report = FLOW.coverage(self.design, [{"id": "TC-1", "status": "PASS"}])
         self.assertEqual("BLOCKED", report[0]["status"])
 
+
+    def test_summary_counts_and_failed_case_coder_handoff(self):
+        inventory = FLOW.read(self.repo / "test-inventory.json")["entries"]
+        cases = [
+            {"id": "PASS-1", "status": "PASS"},
+            {"id": "FAIL-1", "status": "FAIL", "expected": "expected", "reason": "ASSERTION_FAILED",
+             "receipt": "receipt.json", "result": {"path": "result.json", "sha256": "a" * 64}, "receipt_sha256": "b" * 64},
+            {"id": "BLOCKED-1", "status": "BLOCKED"},
+        ]
+        requirements = [{"status": "PASS"}, {"status": "FAIL"}, {"status": "UNTESTED"}]
+        summary = FLOW.report_summary(cases, requirements, inventory,
+                                      {"status": "COLLECTED", "lines": {"covered": 1, "total": 2}}, "INCOMPLETE")
+        self.assertEqual({"total": 3, "passed": 1, "failed": 1, "blocked": 1, "untested": 0}, summary["cases"])
+        self.assertEqual({"total": 3, "passed": 1, "failed": 1, "blocked": 0, "untested": 1},
+                         summary["requirements"])
+        self.assertEqual({"total": 2, "reuse": 1, "update": 1, "add": 0, "retire": 0},
+                         summary["test_inventory"])
+        handoff = summary["coder_handoff"]
+        self.assertTrue(handoff["required"])
+        self.assertEqual("coder", handoff["assignee"])
+        self.assertEqual("product_or_test_oracle_needs_triage", handoff["root_cause"])
+        self.assertEqual(["FAIL-1"], [case["id"] for case in handoff["cases"]])
+
+    def test_blocked_without_failure_does_not_create_coder_handoff(self):
+        summary = FLOW.report_summary([{"id": "BLOCKED-1", "status": "BLOCKED"}],
+                                      [{"status": "BLOCKED"}], [], status="INCOMPLETE")
+        self.assertFalse(summary["coder_handoff"]["required"])
+        self.assertEqual("not_applicable", summary["coder_handoff"]["root_cause"])
+
     def test_pull_request_diff_excludes_base_branch_only_changes(self):
         original = self.revision
         (self.repo / "base-only.txt").write_text("Unrelated change on the base branch\n")
