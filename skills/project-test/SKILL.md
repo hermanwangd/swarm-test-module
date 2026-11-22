@@ -158,3 +158,8 @@ A single-module plan may select `coverage_goal` of `jacoco:report` to read
 line and branch counts from existing execution data. This path currently maps
 exact JUnit method names in tests committed at the PR head. Other CI invocation
 formats or supplemental Java tests require separate evidence.
+
+Declare stage applicability during AC design when the requirements establish it.
+Report local execution, product CI and post-CD SIT separately using the
+execution-stage contract in references/formats.md. Attribute package publishing
+and consumer-import CI to the module and consumer that actually ran those jobs.

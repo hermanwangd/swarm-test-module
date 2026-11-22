@@ -1,0 +1,40 @@
+{
+  "historical_report_sha256": "3cdf70fc069ada2b3e84f387b159b820babc1a1ddf2718d78641a846f50dc9d2",
+  "target": {
+    "kind": "product",
+    "identity": "pallets/click",
+    "revision": "c53d3732b98c764932e146c007146ad402acb229"
+  },
+  "stage": "LOCAL",
+  "evidence_source": "native-tox/report.json",
+  "acceptance_criteria": {
+    "AC-empty": {
+      "LOCAL": {
+        "applicable": true,
+        "status": "PASS"
+      },
+      "CI": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      },
+      "POST_CD_SIT": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      }
+    },
+    "AC-sequence": {
+      "LOCAL": {
+        "applicable": true,
+        "status": "PASS"
+      },
+      "CI": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      },
+      "POST_CD_SIT": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      }
+    }
+  }
+}

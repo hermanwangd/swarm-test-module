@@ -1,5 +1,7 @@
 # External project acceptance run
 
+**Execution stage: LOCAL.** See the [per-AC stage classification](execution-stages.json). Product CI and post-CD SIT remain unverified by this evidence.
+
 Upstream [pallets/click PR 3884](https://github.com/pallets/click/pull/3884)
 specifies how environment variable names appear in option help and errors.
 The PR table, CHANGES.md and upstream behavior tests supply the expected
@@ -37,7 +39,7 @@ passes, 24 Windows-only skips and one expected failure on Linux. This
 supplemental run used upstream pytest directly; the module's combined run
 above used the project's default regression selection.
 
-The [native CI runner report](native-tox/report.json) records a separate Linux
+The [local tox report](native-tox/report.json) records a separate Linux
 CPython 3.12 run through the PR workflow's locked uv/tox entry. Two existing
 pytest functions supplied twelve parameterized checks of help and missing-option
 diagnostics. Two supplemental pytest tests exercise the invalid-value diagnostic

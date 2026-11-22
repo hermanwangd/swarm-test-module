@@ -121,7 +121,7 @@ def collect(repo, revision, base, sources, output, pr_snapshot=None):
         path = output / name
         path.parent.mkdir(exist_ok=True)
         path.write_bytes(data)
-    context = {"schema": "project-test-context.v1", "revision": revision, "base": base, "diff_base": diff_base, "sources": records}
+    context = {"schema": "project-test-context.v1", "revision": revision, "base": base, "diff_base": diff_base, "product": checkout_identity(repo), "sources": records}
     write(output / "context.json", context)
     return context
 
@@ -175,6 +175,39 @@ def check(context_dir, design_path):
             require(isinstance(requirement.get("gap"), str) and requirement["gap"].strip(),
                     requirement["id"] + " uncovered without an explanation")
     return context, design
+
+
+def checkout_identity(repo):
+    origin = subprocess.run(["git", "-C", str(repo), "remote", "get-url", "origin"],
+                            capture_output=True, text=True)
+    github = re.search(r"github\.com[/:]([\w.-]+/[\w.-]+?)(?:\.git)?/?$", origin.stdout.strip())
+    return github.group(1) if github else repo.resolve().name
+
+
+def record_local_execution(report, product, inventory, evidence_source, applicability=None):
+    """These entry points collect local evidence only, including when invoked by automation."""
+    requirements = report.get("requirements", {})
+    if isinstance(requirements, list):
+        requirements = {row["requirement"]: row["status"] for row in requirements}
+    applicability = applicability or {}
+    stages = ("LOCAL", "CI", "POST_CD_SIT")
+    require(isinstance(applicability, dict) and set(applicability).issubset(inventory),
+            "stage applicability references an unknown AC")
+    rows = {}
+    for ac in inventory:
+        declared = applicability.get(ac, {})
+        require(isinstance(declared, dict) and set(declared).issubset(stages)
+                and all(type(value) is bool for value in declared.values()), "invalid stage applicability")
+        rows[ac] = {}
+        for stage in stages:
+            status = requirements.get(ac) if stage == "LOCAL" else None
+            observed = status in ("PASS", "FAIL")
+            require(not (observed and declared.get(stage) is False), "executed AC marked inapplicable")
+            applies = declared.get(stage, True if observed else None)
+            rows[ac][stage] = {"applicable": applies, "status": "NOT_APPLICABLE" if applies is False
+                               else status or "NOT_VERIFIED"}
+    report["execution"] = {"target": {"kind": "product", "identity": product, "revision": report["revision"]},
+                           "stage": "LOCAL", "evidence_source": evidence_source, "acceptance_criteria": rows}
 
 
 def coverage(design, results):
@@ -292,6 +325,10 @@ def run(context_dir, design_path, review_path, review_pin, output):
               "claim": "AGENT_AUTHORED_LOCAL_FRAMEWORK_EXECUTION", "release_eligible": False,
               "cases": results, "requirements": rows, "status": "PASS" if all(r["status"] == "PASS" for r in rows) else "INCOMPLETE",
               "coverage_note": "Coverage of the reviewed AC inventory; not code coverage or proof that the inventory is exhaustive."}
+    product = next((source["origin"] for source in context["sources"] if source["id"] == "pr:snapshot"),
+                   context.get("product"))
+    record_local_execution(report, product, [row["requirement"] for row in rows], "framework case receipts",
+                           design.get("stage_applicability"))
     write(output / "report.json", report)
     return report
 
@@ -306,6 +343,11 @@ def pytest_regression(args):
     require(source.is_dir(), "production source directory is missing")
     ac = read(args.ac_report)
     require(ac.get("schema") == "project-test-report.v1", "expected project-test AC report")
+    source_execution = ac.get("execution", {})
+    product = source_execution.get("target", {}).get("identity") or checkout_identity(repo)
+    applicability = {key: {stage: row["applicable"] for stage, row in stages.items()
+                           if row["applicable"] is not None}
+                     for key, stages in source_execution.get("acceptance_criteria", {}).items()}
     def check_revision():
         require(git(repo, "rev-parse", "HEAD").decode().strip() == ac["revision"], "AC and regression revisions differ")
         require(not git(repo, "status", "--porcelain", "--untracked-files=normal"), "test checkout has uncommitted changes")
@@ -323,6 +365,8 @@ def pytest_regression(args):
     result = {"schema": "project-regression-report.v1", "revision": ac["revision"],
               "ac_report_sha256": sha(args.ac_report), "ac_status": ac["status"], "command": command,
               "pytest_exit_code": rc, "source": args.source, "status": "INCOMPLETE"}
+    record_local_execution(result, product, [row["requirement"] for row in ac["requirements"]],
+                           "referenced AC report and local pytest JUnit/log/coverage", applicability)
     write(out / "report.json", result)
     check_revision()
     subprocess.run([python, "-m", "coverage", "json", "-o", str(out / "coverage.json")],
@@ -339,6 +383,8 @@ def pytest_regression(args):
     result["evidence_sha256"] = {name: sha(out / name) for name in ("coverage.json", "junit.xml", "pytest.log")}
     if rc == 0 and result["tests"]["tests"] > result["tests"]["skipped"] and ac["status"] == "PASS":
         result["status"] = "PASS"
+    record_local_execution(result, product, [row["requirement"] for row in ac["requirements"]],
+                           "referenced AC report and local pytest JUnit/log/coverage", applicability)
     write(out / "report.json", result)
     print(json.dumps(result))
     return 0 if result["status"] == "PASS" else 1
@@ -409,6 +455,7 @@ def native_tox(args):
             elif rc == 0 and len(nodes) > skipped and (not selectors or not skipped):
                 row["status"] = "PASS"
         report["runs"].append(row)
+        record_local_execution(report, plan.get("pr") or checkout_identity(repo), inventory, "local tox JUnit and logs", plan.get("stage_applicability"))
         write(output / "report.json", report)
         check_checkout()
     requirements = {}
@@ -419,6 +466,7 @@ def native_tox(args):
     report["requirements"] = requirements
     if all(state == "PASS" for state in requirements.values()) and report["runs"][-1]["status"] == "PASS":
         report["status"] = "PASS"
+    record_local_execution(report, plan.get("pr") or checkout_identity(repo), inventory, "local tox JUnit and logs", plan.get("stage_applicability"))
     write(output / "report.json", report)
     return 0 if report["status"] == "PASS" else 1
 
@@ -505,6 +553,7 @@ def native_maven(args):
                                   if c.get("type") in ("LINE", "BRANCH")}
         if regression == "PASS" and all(s == "PASS" for s in report["requirements"].values()):
             report["status"] = "PASS"
+    record_local_execution(report, plan.get("pr") or checkout_identity(args.repo), inventory, "local Maven log and Surefire XML", plan.get("stage_applicability"))
     write(output / "report.json", report)
     return 0 if report["status"] == "PASS" else 1
 

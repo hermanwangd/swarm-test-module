@@ -67,3 +67,29 @@ such as `"reviewer": "someone"` alone proves no identity or approval.
 `run` exits 0 only when every inventoried AC has all assigned cases PASS. Exit 1
 means an incomplete report (failed/blocked/untested); exit 2 means invalid inputs
 or execution prevented before dispatch. `check` only validates a design.
+
+## Execution stages and evidence
+
+Each product report identifies the target and revision in `execution.target`,
+the stage actually observed in `execution.stage`, and its evidence source.
+For each AC, `execution.acceptance_criteria` records applicability and status
+for three stages. Applicability is true, false, or null (undetermined). A reviewed
+design or native plan can declare it with the optional per-AC mapping
+`"stage_applicability": {"AC1": {"CI": true, "POST_CD_SIT": false}}`.
+Historical contexts without a product name or PR retain a null identity.
+
+| Stage | Evidence required |
+|---|---|
+| LOCAL | Tested commit and local case results, logs or framework receipts. Running a project's CI command locally produces LOCAL evidence. |
+| CI | Product pipeline run ID or URL, tested checkout SHA and results of the required jobs. Module publication and downstream package-import jobs describe their own targets. |
+| POST_CD_SIT | CD deployment record, target SIT environment, observed artifact version or digest, and integration results from that deployment. |
+
+The local collectors emit NOT_VERIFIED for stages without evidence, or
+NOT_APPLICABLE for a stage explicitly excluded by the reviewed scope. Each
+top-level verdict describes only that report's execution scope. A local AC
+can pass while the local build remains incomplete or a release gate is pending.
+
+Unit describes the scope of a test case. The same unit case can execute in a
+developer checkout and again in the product pipeline. Preserve its scope across
+runs. A JUnit or pytest result alone cannot establish whether a case exercises
+one unit, several components, or a deployed system.

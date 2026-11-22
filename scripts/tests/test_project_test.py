@@ -150,6 +150,18 @@ class ProjectTest(unittest.TestCase):
                 FLOW.run(self.context, self.save_design(), review, FLOW.sha(review), self.root / "run")
             launch.assert_not_called()
 
+    def test_local_evidence_cannot_promote_product_ci_or_sit(self):
+        report = {"revision": self.revision, "requirements": {"AC1": "PASS", "AC2": "FAIL"}}
+        FLOW.record_local_execution(report, "example/project", ["AC1", "AC2"], "local JUnit",
+                                    {"AC1": {"CI": True, "POST_CD_SIT": False}})
+        rows = report["execution"]["acceptance_criteria"]
+        self.assertEqual(rows["AC1"]["CI"], {"applicable": True, "status": "NOT_VERIFIED"})
+        self.assertEqual(rows["AC1"]["POST_CD_SIT"]["status"], "NOT_APPLICABLE")
+        self.assertEqual(rows["AC2"]["LOCAL"]["status"], "FAIL")
+        self.assertEqual(rows["AC2"]["POST_CD_SIT"], {"applicable": None, "status": "NOT_VERIFIED"})
+        with self.assertRaisesRegex(ValueError, "inapplicable"):
+            FLOW.record_local_execution(report, "example/project", ["AC1"], "local JUnit", {"AC1": {"LOCAL": False}})
+
     def test_maven_ci_success_cannot_cover_absent_or_skipped_assertions(self):
         from argparse import Namespace
         import os

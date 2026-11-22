@@ -1,0 +1,82 @@
+{
+  "historical_report_sha256": "ee9eae81b3640b9ce490b5c7362fda235ad97af9f9382cc5f918cdf15f078c45",
+  "target": {
+    "kind": "product",
+    "identity": "apache/commons-cli",
+    "revision": "f5809722f818c38b6264afd31ad179ec0609e5df"
+  },
+  "stage": "LOCAL",
+  "evidence_source": "report.json",
+  "acceptance_criteria": {
+    "registered-option": {
+      "LOCAL": {
+        "applicable": true,
+        "status": "PASS"
+      },
+      "CI": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      },
+      "POST_CD_SIT": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      }
+    },
+    "second-property": {
+      "LOCAL": {
+        "applicable": true,
+        "status": "PASS"
+      },
+      "CI": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      },
+      "POST_CD_SIT": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      }
+    },
+    "later-arguments": {
+      "LOCAL": {
+        "applicable": true,
+        "status": "PASS"
+      },
+      "CI": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      },
+      "POST_CD_SIT": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      }
+    },
+    "later-pairs": {
+      "LOCAL": {
+        "applicable": true,
+        "status": "PASS"
+      },
+      "CI": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      },
+      "POST_CD_SIT": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      }
+    },
+    "preset": {
+      "LOCAL": {
+        "applicable": true,
+        "status": "PASS"
+      },
+      "CI": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      },
+      "POST_CD_SIT": {
+        "applicable": null,
+        "status": "NOT_VERIFIED"
+      }
+    }
+  }
+}
