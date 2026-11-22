@@ -127,6 +127,20 @@ def collect(repo, revision, base, sources, output, pr_snapshot=None):
     return context
 
 
+def test_inventory_data(context_dir, sources, design):
+    inventory = design.get("test_inventory")
+    require(isinstance(inventory, dict), "checked-in test inventory is required")
+    inventory_path = relative(inventory.get("path"))
+    inventory_source = sources.get("test:" + inventory_path)
+    require(inventory_source is not None, "test inventory must be collected from the pinned checkout")
+    require(inventory.get("sha256") == inventory_source["sha256"], "test inventory digest mismatch")
+    inventory_data = read(contained(context_dir, inventory_source["snapshot"]))
+    require(inventory_data.get("schema") == "project-test-inventory.v1", "unsupported test inventory schema")
+    entries = inventory_data.get("entries")
+    require(isinstance(entries, list) and 0 < len(entries) <= 1024, "test inventory entries are required")
+    return entries
+
+
 def check(context_dir, design_path):
     context, design = read(context_dir / "context.json"), read(design_path)
     require(context["schema"] == "project-test-context.v1" and design["schema"] == "project-test-design.v2",
@@ -153,16 +167,7 @@ def check(context_dir, design_path):
     require(0 < len(requirements) <= 512, "requirements inventory is required")
     ids = [r["id"] for r in requirements]
     require(all(isinstance(x, str) and x.strip() for x in ids) and len(ids) == len(set(ids)), "invalid requirement IDs")
-    inventory = design.get("test_inventory")
-    require(isinstance(inventory, dict), "checked-in test inventory is required")
-    inventory_path = relative(inventory.get("path"))
-    inventory_source = sources.get("test:" + inventory_path)
-    require(inventory_source is not None, "test inventory must be collected from the pinned checkout")
-    require(inventory.get("sha256") == inventory_source["sha256"], "test inventory digest mismatch")
-    inventory_data = read(contained(context_dir, inventory_source["snapshot"]))
-    require(inventory_data.get("schema") == "project-test-inventory.v1", "unsupported test inventory schema")
-    entries = inventory_data.get("entries")
-    require(isinstance(entries, list) and 0 < len(entries) <= 1024, "test inventory entries are required")
+    entries = test_inventory_data(context_dir, sources, design)
     inventory_ids = set()
     active_by_requirement = {requirement: set() for requirement in ids}
     for entry in entries:
@@ -258,6 +263,70 @@ def coverage(design, results):
         rows.append({"requirement": requirement["id"], "status": status, "cases": cases,
                      "gap": requirement.get("gap"), "citations": requirement["citations"]})
     return rows
+
+
+def status_counts(items, field="status"):
+    counts = {"total": len(items), "passed": 0, "failed": 0, "blocked": 0, "untested": 0}
+    for item in items:
+        status = str(item.get(field, "BLOCKED")).lower()
+        if status == "pass":
+            counts["passed"] += 1
+        elif status == "fail":
+            counts["failed"] += 1
+        elif status == "untested":
+            counts["untested"] += 1
+        else:
+            counts["blocked"] += 1
+    return counts
+
+
+def inventory_summary(entries):
+    counts = {"total": len(entries), "reuse": 0, "update": 0, "add": 0, "retire": 0}
+    for entry in entries:
+        action = entry.get("action")
+        if action in counts:
+            counts[action] += 1
+    return counts
+
+
+def coder_handoff(cases):
+    failed = [case for case in cases if case.get("status") == "FAIL"]
+    if not failed:
+        return {"required": False, "assignee": None, "root_cause": "not_applicable", "cases": []}
+    handoff_cases = []
+    for case in failed:
+        handoff_cases.append({
+            "id": case.get("id"),
+            "expected": case.get("expected"),
+            "reason": case.get("reason"),
+            "receipt": case.get("receipt"),
+            "result": case.get("result"),
+            "evidence": {"receipt_sha256": case.get("receipt_sha256")},
+        })
+    return {
+        "required": True,
+        "assignee": "coder",
+        "root_cause": "product_or_test_oracle_needs_triage",
+        "summary": "Reviewed test execution failed; a coder must compare expected and actual evidence before changing product code or requesting oracle correction.",
+        "tasks": [
+            "Reproduce the failing case from the linked receipt and canonical result",
+            "Compare the reviewed expected result with the actual observation",
+            "Fix the product defect or request independent oracle correction",
+            "Rerun from a fresh output directory after the fix and review",
+        ],
+        "cases": handoff_cases,
+    }
+
+
+def report_summary(cases, requirements, inventory_entries, code_coverage=None, status="INCOMPLETE"):
+    return {
+        "status": status,
+        "cases": status_counts(cases),
+        "requirements": status_counts(requirements),
+        "test_inventory": inventory_summary(inventory_entries),
+        "code_coverage": code_coverage or {"status": "NOT_COLLECTED"},
+        "coder_handoff": coder_handoff(cases),
+    }
 
 
 def run(context_dir, design_path, review_path, review_pin, output):
@@ -358,10 +427,12 @@ def run(context_dir, design_path, review_path, review_pin, output):
         # Keep completed case evidence even if a later invocation is interrupted.
         write(output / "progress.json", results)
     rows = coverage(design, results)
+    inventory_entries = test_inventory_data(context_dir, {source["id"]: source for source in context["sources"]}, design)
     report = {"schema": "project-test-report.v1", "revision": context["revision"], "review_sha256": review_pin,
               "claim": "AGENT_AUTHORED_LOCAL_FRAMEWORK_EXECUTION", "release_eligible": False,
               "cases": results, "requirements": rows, "status": "PASS" if all(r["status"] == "PASS" for r in rows) else "INCOMPLETE",
               "coverage_note": "Coverage of the reviewed AC inventory; not code coverage or proof that the inventory is exhaustive."}
+    report["summary"] = report_summary(results, rows, inventory_entries, status=report["status"])
     product = next((source["origin"] for source in context["sources"] if source["id"] == "pr:snapshot"),
                    context.get("product"))
     record_local_execution(report, product, [row["requirement"] for row in rows], "framework case receipts",
@@ -417,6 +488,7 @@ def pytest_regression(args):
     result["tests"] = {key: sum(int(node.attrib[key]) for node in suites.iter("testsuite"))
                        for key in ("tests", "errors", "failures", "skipped")}
     result["requirements"] = ac["requirements"]
+    result["summary"] = report_summary([], ac["requirements"], [], {"status": "COLLECTED", "lines": result["lines"], "branches": result["branches"]}, result["status"])
     result["evidence_sha256"] = {name: sha(out / name) for name in ("coverage.json", "junit.xml", "pytest.log")}
     if rc == 0 and result["tests"]["tests"] > result["tests"]["skipped"] and ac["status"] == "PASS":
         result["status"] = "PASS"
@@ -503,6 +575,7 @@ def native_tox(args):
     report["requirements"] = requirements
     if all(state == "PASS" for state in requirements.values()) and report["runs"][-1]["status"] == "PASS":
         report["status"] = "PASS"
+    report["summary"] = report_summary(report["runs"], [{"status": status} for status in requirements.values()], [], status=report["status"])
     record_local_execution(report, plan.get("pr") or checkout_identity(repo), inventory, "local tox JUnit and logs", plan.get("stage_applicability"))
     write(output / "report.json", report)
     return 0 if report["status"] == "PASS" else 1
@@ -590,6 +663,8 @@ def native_maven(args):
                                   if c.get("type") in ("LINE", "BRANCH")}
         if regression == "PASS" and all(s == "PASS" for s in report["requirements"].values()):
             report["status"] = "PASS"
+    coverage_value = {"status": "COLLECTED", **report["coverage"]} if report.get("coverage") else {"status": "NOT_COLLECTED"}
+    report["summary"] = report_summary(report["runs"], [{"status": status} for status in report["requirements"].values()], [], coverage_value, report["status"])
     record_local_execution(report, plan.get("pr") or checkout_identity(args.repo), inventory, "local Maven log and Surefire XML", plan.get("stage_applicability"))
     write(output / "report.json", report)
     return 0 if report["status"] == "PASS" else 1
