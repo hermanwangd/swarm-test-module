@@ -18,6 +18,26 @@ PROFILES = {
     "greeter.v1": ("helloworld.Greeter", "SayHello", "greeter.desc.b64"),
     "routeguide.getfeature.v1": ("routeguide.RouteGuide", "GetFeature", "routeguide.desc.b64"),
 }
+CONTRACT = "docs/02-architecture/contracts/provider-contracts/grpc_client_v0_3.yaml"
+REVIEW_TEMPLATE = "samples/41-product-testing/reviewed_local/review-input.json"
+
+def framework_source(args):
+    """Locate the separate framework source checkout holding the reviewed inputs.
+
+    Explicit --framework-source wins, then SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE; the legacy
+    integrations/swarm-product-test in-tree layout is auto-detected for compatibility.
+    """
+    candidate = args.framework_source or os.environ.get("SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE")
+    if candidate:
+        root = Path(candidate).resolve(strict=True)
+    else:
+        legacy = Path(__file__).resolve().parents[1].parents[1]
+        assert (legacy / CONTRACT).is_file() and (legacy / REVIEW_TEMPLATE).is_file(), \
+            "Framework source root required: pass --framework-source or set SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE"
+        root = legacy
+    assert (root / CONTRACT).is_file() and (root / REVIEW_TEMPLATE).is_file(), \
+        "Framework source root lacks the reviewed contract and review template: " + str(root)
+    return root
 
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -53,9 +73,11 @@ def main():
     parser.add_argument("--expect-verdict", choices=["passed", "failed"], required=True)
     parser.add_argument("--via-host", action="store_true")
     parser.add_argument("--review-metadata-file", type=Path, help="Independent reviewed source and review facts; does not approve preparation")
+    parser.add_argument("--framework-source", type=Path,
+                        help="Separate framework source checkout; falls back to SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE")
     parser.add_argument("--java-home", type=Path, default=Path(os.environ.get("JAVA_HOME", "/usr")))
     args = parser.parse_args()
-    source = Path(__file__).resolve().parents[3]
+    source = framework_source(args)
     fixture = args.fixture_dir.resolve(strict=True)
     oracle = args.oracle_file.resolve(strict=True)
     oracle_bytes = oracle.read_bytes()
@@ -80,7 +102,7 @@ def main():
     (suite / "expected").mkdir()
     (suite / "expected/response.json").write_bytes(oracle_bytes)
     (suite / "contracts").mkdir()
-    shutil.copyfile(source / "docs/02-architecture/contracts/provider-contracts/grpc_client_v0_3.yaml", suite / "contracts/grpc.yaml")
+    shutil.copyfile(source / CONTRACT, suite / "contracts/grpc.yaml")
     suite_id = "REVIEWED-GRPC-LOCAL"
     profile = "local_native"
     manifest = {"manifest_version": "v0.3", "suite_id": suite_id, "default_profile": profile,
@@ -97,7 +119,7 @@ def main():
           "execute": [{"id": "unary", "target": "grpc_api", "op": "unary_call", "with": {"grpc.service": service, "grpc.method": method,
               "grpc.descriptor_ref": "artifact://fixtures/" + descriptor, "grpc.message": "artifact://fixtures/request.json", "grpc.timeout": "PT5S"}}],
           "verify": [{"id": "response_oracle", "type": "assertion", "assert": {"actual": "step://unary/response.message", "operator": "json_match", "expected_ref": "artifact://expected/response.json"}}]})
-    review = json.loads((source / "samples/41-product-testing/reviewed_local/review-input.json").read_text())
+    review = json.loads((source / REVIEW_TEMPLATE).read_text())
     review.pop("suite_id", None); review.pop("profile", None)
     requirement_ref = "synthetic://requirement/grpc-unary"
     metadata_identity = None

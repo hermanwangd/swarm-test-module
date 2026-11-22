@@ -6,7 +6,7 @@ This C project supplements the earlier Go PocketBase and C jq checks. It exercis
 
 The same pinned source archive builds on Linux and macOS using an existing C compiler. The build uses the documented [direct CLI compilation](https://www.sqlite.org/howtocompile.html#compiling_the_command_line_interface), `-O0 -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION shell.c sqlite3.c -lm`; it installs no compiler, dependencies, containers or system packages. The executable's SHA-256 is host specific and is retained with compiler identity, flags, source hashes, architecture and archive hashes in `build.json`. That digest pins the resulting local executable; it does not promise byte-identical Linux and macOS binaries or pin OS libraries.
 
-The execution environment must permit Java to observe its owned process tree. A macOS sandbox that denies the `sysctl` query makes the provider fail closed with uncertain cleanup; the canonical verdict remains failed even when a later check confirms the child stopped. Preserve that evidence and resolve the environment permission before an independently approved fresh attempt. The harness does not retry or relax cleanup checks automatically. See the [local process boundary](../../../../docs/09-operations/reviewed_cli_process.md).
+The execution environment must permit Java to observe its owned process tree. A macOS sandbox that denies the `sysctl` query makes the provider fail closed with uncertain cleanup; the canonical verdict remains failed even when a later check confirms the child stopped. Preserve that evidence and resolve the environment permission before an independently approved fresh attempt. The harness does not retry or relax cleanup checks automatically. See the [local process boundary](https://github.com/hermanwangd/Auto_Regression_Test_Framework/blob/plug-in-module/docs/09-operations/reviewed_cli_process.md).
 
 [`cases.json`](cases.json) contains fixed expected values reviewed before any product execution. Values come from the SQL fixtures and documented [CLI semantics](https://www.sqlite.org/cli.html), never captured product output:
 
@@ -27,18 +27,19 @@ SQLite 3.54.1's pinned `shell.c` reports the missing-table error as `Parse error
 From the repository root, fetch and compile into a **new** task-owned cache:
 
 ```sh
-python3 -B integrations/swarm-product-test/scripts/public-cli-project.py fetch \
+python3 -B scripts/public-cli-project.py fetch \
   --project sqlite --cache-dir /absolute/new/sqlite-cache
 ```
 
 Only the URLs in the lock are fetched. Redirects, encrypted or unexpected archive entries, symlinks, traversal and expanded sources over 20 MiB are rejected. The harness checks a combined 200 MiB cache/evidence budget and a minimum 5 GiB free reserve. Downloads or failed runs are retained for inspection; it never deletes existing cache or evidence directories.
 
-After building both framework and module as described in the [reproduction guide](../../../../docs/09-operations/product-testing-reproduction.md), prepare exact reviewed inputs. Supply the independently selected hashes of the actual JARs and a JDK 17 location:
+After building both framework and module as described in the [reproduction guide](https://github.com/hermanwangd/Auto_Regression_Test_Framework/blob/plug-in-module/docs/09-operations/product-testing-reproduction.md), prepare exact reviewed inputs. The harness reads the reviewed provider contract and review template from the separate **framework source checkout**: pass `--framework-source /absolute/framework-checkout` (or set `SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE`). Supply the independently selected hashes of the actual JARs and a JDK 17 location:
 
 ```sh
-python3 -B integrations/swarm-product-test/scripts/public-cli-project.py prepare \
+python3 -B scripts/public-cli-project.py prepare \
   --project sqlite --cache-dir /absolute/sqlite-cache \
   --evidence-dir /absolute/new/sqlite-evidence \
+  --framework-source /absolute/framework-checkout \
   --framework-jar /absolute/framework.jar --framework-sha256 APPROVED_FRAMEWORK_SHA256 \
   --module-sha256 APPROVED_MODULE_CLI_SHA256 --java-home "$JAVA_HOME" \
   --reviewed-by independent-review-pending --review-ref local-test-review://sqlite-runtime
@@ -47,8 +48,9 @@ python3 -B integrations/swarm-product-test/scripts/public-cli-project.py prepare
 `prepare` runs only the framework's handoff preparation command; it does not execute SQLite. An independent reviewer inspects the fixed inputs, generated suites and `prepared-plan.json`, then provides a separate approval JSON containing `status: approved`, `reviewer`, `review_ref`, `prepared_plan_sha256`, `harness_sha256`, `framework_sha256`, `module_cli_sha256`, `binary_sha256`, and `cases` mapping each case name to its exact handoff SHA-256. Approval is a separate artifact; the harness does not generate it.
 
 ```sh
-python3 -B integrations/swarm-product-test/scripts/public-cli-project.py verify \
+python3 -B scripts/public-cli-project.py verify \
   --evidence-dir /absolute/sqlite-evidence --approval-file /absolute/reviewed-approval.json \
+  --framework-source /absolute/framework-checkout \
   --java-home "$JAVA_HOME"
 ```
 
@@ -58,5 +60,5 @@ Run the offline harness boundary tests with:
 
 ```sh
 python3 -B -m unittest discover \
-  -s integrations/swarm-product-test/scripts/tests -p test_public_cli_project.py -v
+  -s scripts/tests -p test_public_cli_project.py -v
 ```
