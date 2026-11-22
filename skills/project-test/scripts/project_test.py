@@ -344,6 +344,85 @@ def pytest_regression(args):
     return 0 if result["status"] == "PASS" else 1
 
 
+def native_tox(args):
+    """Execute a locally reviewed Click-style uv/tox/pytest plan in a trusted checkout."""
+    import os
+    import xml.etree.ElementTree as ET
+
+    repo = args.repo.resolve(strict=True)
+    plan_path = regular(args.plan)
+    require(sha(plan_path) == args.plan_sha256, "native plan digest mismatch")
+    plan = read(plan_path)
+    revision = plan["revision"]
+    def check_checkout():
+        require(git(repo, "rev-parse", "HEAD").decode().strip() == revision, "checkout revision mismatch")
+        require(not git(repo, "status", "--porcelain"), "dirty checkout")
+    check_checkout()
+    command = ["uv", "run", "--locked", "--no-default-groups", "--group", "dev", "tox", "run"]
+    require(" ".join(command) in git(repo, "show", revision + ":" + relative(plan["workflow"])).decode(),
+            "runner command absent from pinned workflow")
+    require(re.fullmatch(r"py3\.\d+", plan["environment"]), "unsupported tox environment")
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("TOX_", "PYTEST_", "PYTHON", "UV_"))}
+    env["TOX_ENV"] = plan["environment"]
+    output = args.out.absolute()
+    require(not output.resolve().is_relative_to(repo), "write evidence outside checkout")
+    output.mkdir(parents=True, exist_ok=False)
+    inventory = plan["requirements"]
+    require(isinstance(inventory, list) and inventory and all(isinstance(ac, str) and ac for ac in inventory)
+            and len(set(inventory)) == len(inventory), "invalid AC inventory")
+    jobs = []
+    for case in plan["cases"]:
+        require(isinstance(case["requirements"], list) and case["requirements"] and
+                set(case["requirements"]).issubset(inventory) and case["assertion"], "missing AC or assertion")
+        location = case["path"]
+        if case["origin"] == "existing":
+            git(repo, "show", revision + ":" + relative(location))
+        else:
+            require(case["origin"] == "added", "unknown case origin")
+            original = contained(plan_path.parent, location)
+            require(sha(original) == case["sha256"], "supplemental test digest mismatch")
+            directory = output / ("case-" + str(len(jobs)))
+            directory.mkdir()
+            snapshot = directory / original.name
+            snapshot.write_bytes(content(original))
+            require(sha(snapshot) == case["sha256"], "supplemental snapshot mismatch")
+            location = str(snapshot)
+        require(re.fullmatch(r"test_[a-zA-Z0-9_]+", case["function"]), "invalid pytest function")
+        jobs.append((case, [location + "::" + case["function"]]))
+    jobs.append(({"origin": "regression"}, []))
+    report = {"revision": revision, "runner": command, "environment": plan["environment"],
+              "plan_sha256": args.plan_sha256, "runs": [], "status": "INCOMPLETE"}
+    for index, (case, selectors) in enumerate(jobs):
+        xml = output / f"{index}.xml"
+        log = output / f"{index}.log"
+        argv = command + ["--", *selectors, "--junitxml=" + str(xml)]
+        with log.open("wb") as stream:
+            rc = subprocess.run(argv, cwd=repo, env=env, stdout=stream, stderr=subprocess.STDOUT).returncode
+        row = dict(case, exit_code=rc, log=log.name, log_sha256=sha(log), status="BLOCKED")
+        if xml.is_file():
+            nodes = ET.parse(xml).getroot().findall(".//testcase")
+            skipped = sum(node.find("skipped") is not None for node in nodes)
+            failed = sum(any(node.find(tag) is not None for tag in ("failure", "error")) for node in nodes)
+            row.update(tests=len(nodes), skipped=skipped, failed=failed, junit=xml.name, junit_sha256=sha(xml))
+            if failed:
+                row["status"] = "FAIL"
+            elif rc == 0 and len(nodes) > skipped and (not selectors or not skipped):
+                row["status"] = "PASS"
+        report["runs"].append(row)
+        write(output / "report.json", report)
+        check_checkout()
+    requirements = {}
+    for ac in inventory:
+        statuses = [row["status"] for row in report["runs"] if ac in row.get("requirements", [])]
+        requirements[ac] = next((state for state in ("FAIL", "BLOCKED") if state in statuses),
+                                "PASS" if statuses else "UNTESTED")
+    report["requirements"] = requirements
+    if all(state == "PASS" for state in requirements.values()) and report["runs"][-1]["status"] == "PASS":
+        report["status"] = "PASS"
+    write(output / "report.json", report)
+    return 0 if report["status"] == "PASS" else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -372,8 +451,14 @@ def main():
         regression.add_argument("--" + field, type=Path, required=True)
     regression.add_argument("--source", required=True)
     regression.add_argument("--include-stress", action="store_true", help="Clear pytest addopts to include normally excluded tests")
+    native = commands.add_parser("native-tox", help="Run existing and supplemental pytest cases via the reviewed uv/tox CI entry")
+    for field in ("repo", "plan", "out"):
+        native.add_argument("--" + field, type=Path, required=True)
+    native.add_argument("--plan-sha256", required=True)
     args = parser.parse_args()
     try:
+        if args.command == "native-tox":
+            return native_tox(args)
         if args.command == "pytest-regression":
             return pytest_regression(args)
         if args.command == "collect":

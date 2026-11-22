@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="0.085" timestamp="2026-11-22T09:19:10.888050+08:00" hostname="573dea854f61"><testcase classname="pr3884-native-final.case-3.test_envvar_hint" name="test_invalid_value_omits_empty_envvar_hint" time="0.005" /></testsuite></testsuites>

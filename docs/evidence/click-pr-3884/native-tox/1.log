@@ -1,0 +1,20 @@
+py3.12: uv-sync> .venv/bin/uv sync --locked --python-preference system --no-default-groups --no-editable --reinstall-package click --group tests -p cpython3.12
+py3.12: commands[0]> pytest -v --tb=short --basetemp=/workspace/external-validation/coverage-head/.tox/py3.12/tmp tests/test_options.py::test_missing_envvar_sequence --junitxml=/workspace/external-validation/pr3884-native-final/1.xml
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.0.2, pluggy-1.6.0 -- /workspace/external-validation/coverage-head/.tox/py3.12/bin/python3
+cachedir: .tox/py3.12/.pytest_cache
+rootdir: /workspace/external-validation/coverage-head
+configfile: pyproject.toml
+collecting ... collected 6 items
+
+tests/test_options.py::test_missing_envvar_sequence[UNITS-'--units' (env var: 'UNITS')] PASSED [ 16%]
+tests/test_options.py::test_missing_envvar_sequence[envvar1-'--units' (env var: 'UNITS')] PASSED [ 33%]
+tests/test_options.py::test_missing_envvar_sequence[envvar2-'--units' (env var: 'WEATHER_UNITS', 'UNITS')] PASSED [ 50%]
+tests/test_options.py::test_missing_envvar_sequence[envvar3-'--units' (env var: 'WEATHER_UNITS', 'UNITS')] PASSED [ 66%]
+tests/test_options.py::test_missing_envvar_sequence[envvar4-'--units'] PASSED [ 83%]
+tests/test_options.py::test_missing_envvar_sequence[-'--units'] PASSED   [100%]
+
+- generated xml file: /workspace/external-validation/pr3884-native-final/1.xml -
+============================== 6 passed in 0.06s ===============================
+  py3.12: OK (0.69=setup[0.31]+cmd[0.37] seconds)
+  congratulations :) (0.73 seconds)

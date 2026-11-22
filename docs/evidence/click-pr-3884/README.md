@@ -36,3 +36,14 @@ finished. All 31,000 stress cases passed. The complete run recorded 33,111
 passes, 24 Windows-only skips and one expected failure on Linux. This
 supplemental run used upstream pytest directly; the module's combined run
 above used the project's default regression selection.
+
+The [native CI runner report](native-tox/report.json) records a separate Linux
+CPython 3.12 run through the PR workflow's locked uv/tox entry. Two existing
+pytest functions supplied twelve parameterized checks of help and missing-option
+diagnostics. Two supplemental pytest tests exercise the invalid-value diagnostic
+specified in the PR body. Both failed against the base revision and passed at
+the PR head. See the [base JUnit output](native-tox/base-control.xml),
+[native plan and assertion mappings](native-tox/plan.json), [default regression
+log](native-tox/4.log) and [separate coverage measurement](native-tox/coverage-summary.json).
+The plan and tests were prepared in this workspace. Formal ENGCIM agent execution
+and independent native-plan review are unverified.

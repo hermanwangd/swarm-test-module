@@ -42,7 +42,15 @@ issue comment, notification or deployment is authorized by this skill.
    necessary. Collection reads committed bytes, ignoring dirty working files.
    Keep private context/evidence outside the module repository and public artifacts.
 
-2. **Author** `design.json` and executable Framework v0.3 suite files from those
+2. Read the pinned CI workflow, runner configuration and existing test assertions
+   first. For each AC record what each assertion actually checks. Reuse sufficient
+   checks, extend a partial check or add a focused test in the project's format.
+   Preserve the project's CI entry and environment selection. Compare newly
+   exposed failures on the base revision before attributing them to the PR.
+   Track assertion failures, unavailable runners and untested AC separately.
+
+   For projects using the locked uv/tox entry documented below, use the native
+   path directly. For cases assigned to the Framework, **author** `design.json` and executable Framework v0.3 suite files from those
    sources. First enumerate every in-scope AC, then derive normal/negative,
    boundary, state-transition and affected regression cases as applicable. Each
    case needs preconditions, literal inputs, steps, expected results, rationale
@@ -52,7 +60,7 @@ issue comment, notification or deployment is authorized by this skill.
    oracle. Explain missing coverage, unsupported protocols and requirements that
    cannot yet be executed. A missing test remains UNTESTED.
 
-3. Write each case as the **existing Framework DSL** in a separate suite directory
+3. Write each Framework case as the **existing Framework DSL** in a separate suite directory
    (JSON syntax is valid YAML). Reuse the deployed Framework's contract and provider;
    do not create another executor or DSL. The module currently supports finite
    local component/native integration operations. Broader journeys, shared SIT,
@@ -104,6 +112,23 @@ binding uses the existing versioned Maven artifact/CLI and separately pinned
 Framework. Skill installation and live actor adoption are distinct checks.
 
 ## Project regression and code coverage
+
+For projects whose workflows invoke `uv run --locked --no-default-groups --group dev tox run`
+and pass tox positional arguments to pytest, the Verifier can execute a reviewed
+native plan directly. QA prepares the AC inventory, the workflow path, tox
+environment and pytest functions, with the asserted behavior for each mapping.
+Existing functions are read from the pinned checkout. Supplemental files are
+relative to the plan and bound by SHA-256. The reviewer checks these mappings,
+test source and inventory, then supplies the plan digest to the Verifier.
+The plan is trusted local input. Run in an isolated project test environment.
+
+    python3 <skill-dir>/scripts/project_test.py native-tox --repo <checkout> --plan <plan.json> --plan-sha256 <digest> --out <fresh-directory>
+
+The native report includes per-case origins, assertion mappings and JUnit results,
+followed by the configured default regression result and per-AC verdicts. Retain
+logs, skipped and expected-failure details, environment selection and excluded
+suites. Run coverage measurement separately if the CI command omits it.
+For other runners follow the project's own CI entry and preserve its evidence.
 
 For a Python project using pytest, run the project's own regression suite as
 part of delivery. Append --pytest-repo, --pytest-python and --pytest-source to the normal run command so it executes both stages and writes the combined report under regression/. In the trusted local test environment, provision its test
