@@ -1,0 +1,16 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ----------------------< commons-cli:commons-cli >-----------------------
+[INFO] Building Apache Commons CLI 1.12.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (default-cli) @ commons-cli ---
+[INFO] Loading execution data file /tmp/tmpozjaic58/repo/target/jacoco.exec
+[INFO] Analyzed bundle 'Apache Commons CLI' with 45 classes
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  1.427 s
+[INFO] Finished at: 2026-11-22T09:39:17+08:00
+[INFO] ------------------------------------------------------------------------
