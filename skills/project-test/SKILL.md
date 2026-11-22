@@ -49,8 +49,22 @@ issue comment, notification or deployment is authorized by this skill.
    exposed failures on the base revision before attributing them to the PR.
    Track assertion failures, unavailable runners and untested AC separately.
 
-   For projects using the locked uv/tox entry documented below, use the native
-   path directly. For cases assigned to the Framework, **author** `design.json` and executable Framework v0.3 suite files from those
+   For local dual-runner acceptance, inventory every reused in-scope case and
+   assess whether the Framework can express the same inputs, fixtures and
+   assertions. Run each portable case with both the product runner and the
+   Framework. Implement new cases in Framework DSL and provide a product-native
+   counterpart for comparison. Record the concrete gap for each unsupported
+   fixture, assertion or provider. Keep the product's ordinary regression suite.
+
+   Bind both executions to the same product revision, case inputs and expected
+   behavior. For each comparison report the AC and case ID, both runner case
+   IDs, observed values, verdicts and evidence links. Flag different outcomes,
+   unequal inputs, skipped cases and absent evidence. Two failing verdicts still
+   represent a product failure; two suite-level green totals alone cannot prove
+   case equivalence. Record the originating mission, runtime and agent run when
+   accepting a formal local mission. The assigned runtime must run the module.
+
+   Use the applicable project-native path below. For the Framework run, **author** `design.json` and executable Framework v0.3 suite files from those
    sources. First enumerate every in-scope AC, then derive normal/negative,
    boundary, state-transition and affected regression cases as applicable. Each
    case needs preconditions, literal inputs, steps, expected results, rationale
