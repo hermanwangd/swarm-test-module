@@ -47,9 +47,6 @@ issue comment, notification or deployment is authorized by this skill.
    ```
 
    Repeat `--test` for the checked-in test inventory and every affected test file.
-   For a deleted or moved test, collect its original committed contents with
-   `--historical-test <full-ancestor-commit>:<old-path>`. The source ID includes
-   that exact commit, so future tasks can retrieve the same lines.
    Read **all** resulting source snapshots, including the diff. Follow affected call
    sites and add their pinned source files when necessary. Collection reads committed
    bytes, ignoring dirty working files.
@@ -58,12 +55,9 @@ issue comment, notification or deployment is authorized by this skill.
 2. Read the pinned CI workflow, runner configuration and existing test assertions
    first. Update the checked-in test inventory incrementally: reuse a sufficient
    case, update a partial case, add a focused case, or retire an obsolete case.
-   Preserve unaffected rows in the committed inventory. List the affected IDs in
-   the design's `inventory_scope`, including retirements. Each active entry maps
-   to at least one AC and cites its own current test. A retirement cites its own
-   current or historical path and records the reason. Each executable case uses
-   the same inventory ID, cites its current test and maps to all of that entry's
-   ACs within the reviewed requirements. Preserve the project's CI entry and environment selection. Compare newly
+   Every active inventory entry maps to at least one AC and cites its checked-in
+   test source; every retired entry records why. Do not recreate the baseline from
+   scratch. Preserve the project's CI entry and environment selection. Compare newly
    exposed failures on the base revision before attributing them to the PR.
    Track assertion failures, unavailable runners and untested AC separately.
 
@@ -127,7 +121,7 @@ issue comment, notification or deployment is authorized by this skill.
 
    The helper calls the pinned module CLI, which calls the pinned existing
    Framework. It keeps request/receipt/stderr/canonical result for each case and
-   writes `report.json`, with a result for every AC and a summary of case,
+   writes `report.json` and `summary.md`, with a result for every AC and a summary of case,
    requirement, inventory and code-coverage counts. FAIL stays FAIL; blocked,
    skipped or absent execution never counts as PASS. A FAIL creates a coder
    handoff with the linked evidence and a triage request; it does not claim the
