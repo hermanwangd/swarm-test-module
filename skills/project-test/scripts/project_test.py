@@ -99,14 +99,26 @@ def collect(repo, revision, base, sources, output, pr_snapshot=None):
         records.append({"id": identity, "kind": kind, "origin": origin, "snapshot": snapshot,
                         "sha256": hashlib.sha256(data).hexdigest(), "lines": len(lines)})
         payloads.append((snapshot, data))
+    historical_commits = set()
     for kind, paths in sources.items():
-        require(kind in {"bdd", "ac", "pr", "code", "test"}, "unknown source kind")
-        for name in paths:
+        require(kind in {"bdd", "ac", "pr", "code", "test", "historical-test"}, "unknown source kind")
+        for reference in paths:
+            commit, name = revision, reference
+            if kind == "historical-test":
+                commit, separator, name = reference.partition(":")
+                require(separator and re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", commit),
+                        "historical test requires a full commit and path")
+                if commit not in historical_commits:
+                    require(git(repo, "rev-parse", commit + "^{commit}").decode().strip() == commit,
+                            "historical test must reference a commit")
+                    git(repo, "merge-base", "--is-ancestor", commit, revision)
+                    historical_commits.add(commit)
             relative(name)
-            entry = git(repo, "ls-tree", "-z", revision, "--", name).decode().split("\t", 1)
+            entry = git(repo, "--literal-pathspecs", "ls-tree", "-z", commit, "--", name).decode().split("\t", 1)
             require(len(entry) == 2 and entry[0].split()[0] in {"100644", "100755"}
                     and entry[1] == name + "\x00", "source must be one committed regular file")
-            add(kind + ":" + name, kind, git(repo, "show", revision + ":" + name), revision + ":" + name)
+            origin = commit + ":" + name
+            add(kind + ":" + reference, kind, git(repo, "show", origin), origin)
     if pr_snapshot:
         pr = read(pr_snapshot)
         require(pr["head"] == revision and pr["base"] == base, "PR snapshot does not match source commits")
@@ -152,24 +164,38 @@ def check(context_dir, design_path):
         path = contained(context_dir, source["snapshot"])
         require(sha(path) == source["sha256"], "source snapshot changed")
         require(len(content(path).decode("utf-8").splitlines()) == source["lines"], "source line count changed")
-    def citations(items):
+    def citations(items, *, in_scope=True):
         require(isinstance(items, list) and 0 < len(items) <= 128, "missing citations")
-        kinds = set()
+        references = set()
         for item in items:
-            require(item["source"] in sources, "unknown citation source")
-            source = sources[item["source"]]
-            require(type(item["start"]) is int and type(item["end"]) is int
-                    and 1 <= item["start"] <= item["end"] <= source["lines"], "citation line range invalid")
-            kinds.add(source["kind"])
-        return kinds
+            require(isinstance(item, dict) and isinstance(item.get("source"), str) and item["source"].strip(),
+                    "invalid citation source")
+            require(type(item.get("start")) is int and type(item.get("end")) is int
+                    and 1 <= item["start"] <= item["end"], "citation line range invalid")
+            ref = item["source"]
+            if in_scope:
+                require(ref in sources, "unknown citation source: " + ref)
+                require(item["end"] <= sources[ref]["lines"], "citation line range invalid")
+            references.add(ref)
+        return references
     require(isinstance(design.get("author"), str) and design["author"].strip(), "missing design author")
     requirements = design["requirements"]
     require(0 < len(requirements) <= 512, "requirements inventory is required")
     ids = [r["id"] for r in requirements]
     require(all(isinstance(x, str) and x.strip() for x in ids) and len(ids) == len(set(ids)), "invalid requirement IDs")
+    ac_scope = set(ids)
+    for requirement in requirements:
+        require(any(sources[ref]["kind"] == "ac" for ref in citations(requirement.get("citations"))),
+                "requirement must cite AC")
     entries = test_inventory_data(context_dir, sources, design)
+    selected = None
+    if "inventory_scope" in design:
+        scope = design["inventory_scope"]
+        require(isinstance(scope, list) and all(isinstance(item, str) for item in scope)
+                and len(scope) == len(set(scope)), "inventory_scope requires a list of distinct inventory IDs")
+        selected = set(scope)
     inventory_ids = set()
-    active_by_requirement = {requirement: set() for requirement in ids}
+    active_entries, active_acs = {}, set()
     for entry in entries:
         require(isinstance(entry, dict), "test inventory entry must be an object")
         case_id = entry.get("id")
@@ -181,20 +207,28 @@ def check(context_dir, design_path):
         require(action in {"reuse", "update", "add", "retire"},
                 "test inventory action must be reuse, update, add or retire")
         entry_path = relative(entry.get("path"))
-        require("test:" + entry_path in sources, "test inventory path is not a collected test source")
         entry_requirements = entry.get("requirements")
-        require(isinstance(entry_requirements, list) and all(item in active_by_requirement for item in entry_requirements),
-                "test inventory has an unknown requirement")
+        require(isinstance(entry_requirements, list)
+                and all(isinstance(item, str) and item.strip() for item in entry_requirements)
+                and len(entry_requirements) == len(set(entry_requirements)), "invalid test inventory requirements")
         reason = entry.get("reason")
         require(isinstance(reason, str) and reason.strip(), "test inventory decision requires a reason")
-        entry_kinds = citations(entry.get("citations"))
-        if action in {"reuse", "update", "retire"}:
-            require("test" in entry_kinds, "checked-in test decision must cite the test source")
-        if action != "retire":
+        in_scope = selected is None or case_id in selected
+        refs = citations(entry.get("citations"), in_scope=in_scope)
+        own_path = "test:" + entry_path
+        if action == "retire":
+            historical_path = r"historical-test:(?:[0-9a-f]{40}|[0-9a-f]{64}):" + re.escape(entry_path)
+            require(own_path in refs or any(re.fullmatch(historical_path, ref) for ref in refs),
+                    "retired test must cite its own current or historical test path")
+        else:
+            require(own_path in refs, "active test must cite its own checked-in test path")
             require(entry_requirements, "active test inventory entry must map to at least one AC")
-            for requirement in entry_requirements:
-                active_by_requirement[requirement].add(case_id)
-    cases, covered, case_ids, suites = design["cases"], set(), set(), set()
+            if in_scope:
+                mapped = ac_scope.intersection(entry_requirements)
+                active_entries[case_id] = (own_path, mapped)
+                active_acs.update(mapped)
+    require(selected is None or selected <= inventory_ids, "inventory_scope contains an unknown test inventory ID")
+    cases, case_ids, suites = design["cases"], set(), set()
     require(len(cases) <= 512, "too many cases")
     for case in cases:
         require(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", case["id"]) is not None, "invalid case ID")
@@ -202,10 +236,16 @@ def check(context_dir, design_path):
         case_ids.add(case["id"])
         suites.add(relative(case["suite"]))
         require(case["id"] in inventory_ids, "case is not registered in the checked-in test inventory")
-        require(case["requirements"] and set(case["requirements"]) <= set(ids), "case has unknown requirement")
-        covered.update(case["requirements"])
-        case_kinds = citations(case["citations"])
+        require(case["id"] in active_entries, "case must use an active in-scope test inventory entry")
+        own_path, mapped = active_entries[case["id"]]
+        case_acs = case["requirements"]
+        require(isinstance(case_acs, list) and case_acs and all(isinstance(ac, str) and ac in ac_scope for ac in case_acs),
+                "case has unknown requirement")
+        require(len(case_acs) == len(mapped) and set(case_acs) == mapped, "case ACs differ from its inventory mapping")
+        refs = citations(case["citations"])
+        case_kinds = {sources[ref]["kind"] for ref in refs}
         require({"bdd", "pr", "code"} <= case_kinds, "case must cite bdd, pr and code")
+        require(own_path in refs, "case must cite its own checked-in test path")
         require(case["technique"] in {"equivalence", "boundary", "state", "scenario", "regression"}, "unknown technique")
         for key in ["rationale", "expected", "test_case_id"]:
             require(isinstance(case.get(key), str) and case[key].strip(), "case missing " + key)
@@ -213,9 +253,9 @@ def check(context_dir, design_path):
             require(isinstance(case.get(key), list) and case[key] and all(isinstance(x, str) and x.strip()
                     for x in case[key]), "case missing " + key)
     for requirement in requirements:
-        if not active_by_requirement[requirement["id"]]:
+        if requirement["id"] not in active_acs:
             require(isinstance(requirement.get("gap"), str) and requirement["gap"].strip(),
-                    requirement["id"] + " has no active checked-in test and no explanation")
+                    requirement["id"] + " has no active checked-in test in scope and no explanation")
     return context, design
 
 
@@ -301,7 +341,8 @@ def coder_handoff(cases):
             "reason": case.get("reason"),
             "receipt": case.get("receipt"),
             "result": case.get("result"),
-            "evidence": {"receipt_sha256": case.get("receipt_sha256")},
+            "evidence": {key: case[key] for key in
+                         ("receipt_sha256", "junit", "junit_sha256", "log", "log_sha256") if key in case},
         })
     return {
         "required": True,
@@ -430,7 +471,8 @@ def run(context_dir, design_path, review_path, review_pin, output):
     inventory_entries = test_inventory_data(context_dir, {source["id"]: source for source in context["sources"]}, design)
     report = {"schema": "project-test-report.v1", "revision": context["revision"], "review_sha256": review_pin,
               "claim": "AGENT_AUTHORED_LOCAL_FRAMEWORK_EXECUTION", "release_eligible": False,
-              "cases": results, "requirements": rows, "status": "PASS" if all(r["status"] == "PASS" for r in rows) else "INCOMPLETE",
+              "cases": results, "requirements": rows, "test_inventory": design["test_inventory"],
+              "status": "PASS" if all(r["status"] == "PASS" for r in rows) else "INCOMPLETE",
               "coverage_note": "Coverage of the reviewed AC inventory; not code coverage or proof that the inventory is exhaustive."}
     report["summary"] = report_summary(results, rows, inventory_entries, status=report["status"])
     product = next((source["origin"] for source in context["sources"] if source["id"] == "pr:snapshot"),
@@ -488,10 +530,21 @@ def pytest_regression(args):
     result["tests"] = {key: sum(int(node.attrib[key]) for node in suites.iter("testsuite"))
                        for key in ("tests", "errors", "failures", "skipped")}
     result["requirements"] = ac["requirements"]
-    result["summary"] = report_summary([], ac["requirements"], [], {"status": "COLLECTED", "lines": result["lines"], "branches": result["branches"]}, result["status"])
     result["evidence_sha256"] = {name: sha(out / name) for name in ("coverage.json", "junit.xml", "pytest.log")}
-    if rc == 0 and result["tests"]["tests"] > result["tests"]["skipped"] and ac["status"] == "PASS":
+    cases = []
+    for node in suites.iter("testcase"):
+        outcome = next((tag for tag in ("failure", "error", "skipped") if node.find(tag) is not None), None)
+        status = "BLOCKED" if outcome == "skipped" else "FAIL" if outcome else "PASS"
+        case_id = "::".join(part for part in (node.get("classname"), node.get("name")) if part)
+        cases.append({"id": case_id, "status": status, "reason": outcome,
+                      "junit": "junit.xml", "junit_sha256": result["evidence_sha256"]["junit.xml"],
+                      "log": "pytest.log", "log_sha256": result["evidence_sha256"]["pytest.log"]})
+    if (rc == 0 and ac["status"] == "PASS" and any(case["status"] == "PASS" for case in cases)
+            and not any(case["status"] == "FAIL" for case in cases)):
         result["status"] = "PASS"
+    result["summary"] = report_summary(cases, ac["requirements"], [],
+                                       {"status": "COLLECTED", "lines": result["lines"], "branches": result["branches"]},
+                                       result["status"])
     record_local_execution(result, product, [row["requirement"] for row in ac["requirements"]],
                            "referenced AC report and local pytest JUnit/log/coverage", applicability)
     write(out / "report.json", result)
@@ -725,7 +778,7 @@ def main():
     acquire.add_argument("--repo", type=Path, required=True)
     for name in ["revision", "base"]:
         acquire.add_argument("--" + name, required=True)
-    for name in ["bdd", "ac", "pr", "code", "test"]:
+    for name in ["bdd", "ac", "pr", "code", "test", "historical-test"]:
         acquire.add_argument("--" + name, action="append", default=[])
     acquire.add_argument("--pr-snapshot", type=Path)
     acquire.add_argument("--out", type=Path, required=True)
@@ -772,8 +825,9 @@ def main():
         if args.command == "pytest-regression":
             return pytest_regression(args)
         if args.command == "collect":
-            collect(args.repo, args.revision, args.base, {kind: getattr(args, kind) for kind in ["bdd", "ac", "pr", "code", "test"]},
-                    args.out.absolute(), args.pr_snapshot)
+            sources = {kind: getattr(args, kind) for kind in ["bdd", "ac", "pr", "code", "test"]}
+            sources["historical-test"] = args.historical_test
+            collect(args.repo, args.revision, args.base, sources, args.out.absolute(), args.pr_snapshot)
             print(json.dumps({"context": str(args.out / "context.json"), "sha256": sha(args.out / "context.json")}))
         elif args.command == "check":
             _, design = check(args.context, args.design)
