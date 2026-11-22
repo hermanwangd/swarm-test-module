@@ -423,6 +423,86 @@ def native_tox(args):
     return 0 if report["status"] == "PASS" else 1
 
 
+def native_maven(args):
+    """Run a reviewed Maven CI invocation once, mapping Surefire results to AC."""
+    import tempfile
+    import xml.etree.ElementTree as ET
+
+    require(sha(args.plan) == args.plan_sha256, "native plan digest mismatch")
+    plan = read(args.plan)
+    revision = plan["revision"]
+    require(re.fullmatch("[0-9a-f]{40}", revision), "expected full commit")
+    workflow = git(args.repo, "show", revision + ":" + relative(plan["workflow"])).decode()
+    cmd = plan["runner"]
+    allowed = {"--errors", "--show-version", "--batch-mode", "--no-transfer-progress",
+               "-B", "-ntp", "clean", "test", "verify", "package"}
+    require(isinstance(cmd, list) and cmd and cmd[0] == "mvn" and all(v in allowed for v in cmd[1:]),
+            "unsupported Maven invocation")
+    require("run: " + " ".join(cmd) in [line.strip() for line in workflow.splitlines()],
+            "command absent from pinned CI workflow")
+    inventory = plan["requirements"]
+    require(isinstance(inventory, list) and inventory and len(set(inventory)) == len(inventory), "invalid AC inventory")
+    for case in plan["cases"]:
+        require(case["requirements"] and set(case["requirements"]).issubset(inventory) and case["assertion"],
+                "invalid AC mapping")
+        require(case["origin"] == "existing", "expected a test in the PR checkout")
+        git(args.repo, "show", revision + ":" + relative(case["path"]))
+    output = args.out.absolute()
+    require(not output.resolve().is_relative_to(args.repo.resolve()), "write evidence outside checkout")
+    output.mkdir(parents=True, exist_ok=False)
+    report = {"revision": revision, "runner": cmd, "plan_sha256": args.plan_sha256,
+              "status": "INCOMPLETE", "runs": [], "requirements": {}, "coverage": None}
+    with tempfile.TemporaryDirectory() as temp:
+        checkout = Path(temp) / "repo"
+        subprocess.run(["git", "clone", "-q", "--no-checkout", "--", str(args.repo.resolve()), str(checkout)], check=True)
+        subprocess.run(["git", "checkout", "-q", "--detach", revision], cwd=checkout, check=True)
+        xmls = "target/surefire-reports/TEST-*.xml"
+        require(not list(checkout.rglob(xmls)) and not (checkout / "target/site/jacoco/jacoco.xml").exists()
+                and not (checkout / "target/jacoco.exec").exists(), "checkout contains pre-existing test evidence")
+        log = output / "maven.log"
+        with log.open("wb") as stream:
+            rc = subprocess.run(cmd, cwd=checkout, stdout=stream, stderr=subprocess.STDOUT).returncode
+        observed = {}
+        counts = {"PASS": 0, "FAIL": 0, "SKIPPED": 0}
+        for xml in sorted(checkout.rglob(xmls)):
+            nodes = ET.parse(regular(xml)).getroot().findall(".//testcase")
+            for node in nodes:
+                failed = any(node.find(tag) is not None for tag in ("failure", "error"))
+                status = "FAIL" if failed else "SKIPPED" if node.find("skipped") is not None else "PASS"
+                counts[status] += 1
+                key = (node.get("classname"), node.get("name"))
+                observed.setdefault(key, []).append((status, xml, node))
+        for case in plan["cases"]:
+            matches = observed.get((case["class"], case["method"]), [])
+            states = {status for status, _, _ in matches}
+            status = "FAIL" if "FAIL" in states else "PASS" if states == {"PASS"} else "BLOCKED"
+            evidence = [{"file": str(xml.relative_to(checkout)), "sha256": sha(xml),
+                         "class": node.get("classname"), "method": node.get("name"), "status": state}
+                        for state, xml, node in matches]
+            report["runs"].append(dict(case, status=status, junit=evidence))
+        for ac in inventory:
+            statuses = [r["status"] for r in report["runs"] if ac in r["requirements"]]
+            report["requirements"][ac] = next((s for s in ("FAIL", "BLOCKED") if s in statuses),
+                                               "PASS" if statuses else "UNTESTED")
+        regression = "FAIL" if counts["FAIL"] else "PASS" if rc == 0 and counts["PASS"] else "BLOCKED"
+        report["regression"] = dict(counts, status=regression, exit_code=rc, log_sha256=sha(log))
+        jacoco = checkout / "target/site/jacoco/jacoco.xml"
+        if plan.get("coverage_goal") == "jacoco:report" and not jacoco.exists() and (checkout / "target/jacoco.exec").is_file():
+            coverage_log = output / "coverage.log"
+            with coverage_log.open("wb") as stream:
+                coverage_rc = subprocess.run(["mvn", "-B", "-ntp", "jacoco:report"], cwd=checkout,
+                                             stdout=stream, stderr=subprocess.STDOUT).returncode
+            report["coverage_execution"] = {"exit_code": coverage_rc, "log_sha256": sha(coverage_log)}
+        if jacoco.is_file() and report.get("coverage_execution", {}).get("exit_code", 0) == 0:
+            report["coverage"] = {c.get("type"): {"covered": int(c.get("covered")), "missed": int(c.get("missed"))}
+                                  for c in ET.parse(regular(jacoco)).getroot().findall("counter")
+                                  if c.get("type") in ("LINE", "BRANCH")}
+        if regression == "PASS" and all(s == "PASS" for s in report["requirements"].values()):
+            report["status"] = "PASS"
+    write(output / "report.json", report)
+    return 0 if report["status"] == "PASS" else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -455,8 +535,14 @@ def main():
     for field in ("repo", "plan", "out"):
         native.add_argument("--" + field, type=Path, required=True)
     native.add_argument("--plan-sha256", required=True)
+    maven = commands.add_parser("native-maven", help="Run the pinned Maven CI entry and map exact Surefire methods to AC")
+    for field in ("repo", "plan", "out"):
+        maven.add_argument("--" + field, type=Path, required=True)
+    maven.add_argument("--plan-sha256", required=True)
     args = parser.parse_args()
     try:
+        if args.command == "native-maven":
+            return native_maven(args)
         if args.command == "native-tox":
             return native_tox(args)
         if args.command == "pytest-regression":

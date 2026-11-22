@@ -150,6 +150,31 @@ class ProjectTest(unittest.TestCase):
                 FLOW.run(self.context, self.save_design(), review, FLOW.sha(review), self.root / "run")
             launch.assert_not_called()
 
+    def test_maven_ci_success_cannot_cover_absent_or_skipped_assertions(self):
+        from argparse import Namespace
+        import os
+        (self.repo / 'ci.yml').write_text('  run: mvn test\n')
+        self.git('add', 'ci.yml')
+        self.git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'ci')
+        binary = self.root / 'mvn'
+        binary.write_text("""#!/bin/sh
+mkdir -p target/surefire-reports
+echo '<testsuite><testcase classname="C" name="ok"/><testcase classname="C" name="skip"><skipped/></testcase></testsuite>' > target/surefire-reports/TEST-C.xml
+""")
+        binary.chmod(0o755)
+        path = self.root / 'plan.json'
+        cases = [dict(origin='existing', path='Main.java', method=name, requirements=[name],
+                      assertion='checked by fixture', **{'class': 'C'}) for name in ('ok', 'skip', 'missing')]
+        FLOW.write(path, dict(revision=self.git('rev-parse', 'HEAD'), runner=['mvn', 'test'],
+                              workflow='ci.yml', requirements=['ok', 'skip', 'missing', 'unmapped'], cases=cases))
+        args = Namespace(repo=self.repo, plan=path, plan_sha256=FLOW.sha(path), out=self.root / 'native')
+        with patch.dict(os.environ, PATH=str(self.root) + os.pathsep + os.environ['PATH']):
+            self.assertEqual(1, FLOW.native_maven(args))
+        report = FLOW.read(args.out / 'report.json')
+        self.assertEqual('PASS', report['regression']['status'])
+        self.assertEqual({'ok': 'PASS', 'skip': 'BLOCKED', 'missing': 'BLOCKED', 'unmapped': 'UNTESTED'},
+                         report['requirements'])
+
 
 if __name__ == "__main__":
     unittest.main()

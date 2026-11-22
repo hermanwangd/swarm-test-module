@@ -143,3 +143,18 @@ because this clears all pytest addopts. Report test counts, skips, measured
 production lines and branches, and remaining gaps alongside the AC rows. For
 other build systems, run the project's native suite and coverage tooling in its
 test environment and report the equivalent evidence or the concrete blocker.
+
+
+For a Maven product using Surefire, match reviewed AC to existing JUnit class
+and method assertions before authoring additional cases. When those assertions
+cover the requirements, run the exact supported Maven command from the pinned
+CI workflow in an isolated environment with the project's JDK and dependencies:
+
+    python3 <skill-dir>/scripts/project_test.py native-maven --repo <checkout> --plan <plan.json> --plan-sha256 <digest> --out <fresh-directory>
+
+The helper uses a fresh checkout and reports each matched Surefire method and
+the overall build separately. Missing or skipped methods cannot pass an AC.
+A single-module plan may select `coverage_goal` of `jacoco:report` to read
+line and branch counts from existing execution data. This path currently maps
+exact JUnit method names in tests committed at the PR head. Other CI invocation
+formats or supplemental Java tests require separate evidence.
