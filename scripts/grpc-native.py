@@ -21,6 +21,12 @@ PROFILES = {
 CONTRACT = "docs/02-architecture/contracts/provider-contracts/grpc_client_v0_3.yaml"
 REVIEW_TEMPLATE = "samples/41-product-testing/reviewed_local/review-input.json"
 
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
 def framework_source(args):
     """Locate the separate framework source checkout holding the reviewed inputs.
 
@@ -32,11 +38,11 @@ def framework_source(args):
         root = Path(candidate).resolve(strict=True)
     else:
         legacy = Path(__file__).resolve().parents[1].parents[1]
-        assert (legacy / CONTRACT).is_file() and (legacy / REVIEW_TEMPLATE).is_file(), \
-            "Framework source root required: pass --framework-source or set SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE"
+        require((legacy / CONTRACT).is_file() and (legacy / REVIEW_TEMPLATE).is_file(),
+                "Framework source root required: pass --framework-source or set SWARM_PRODUCT_TEST_FRAMEWORK_SOURCE")
         root = legacy
-    assert (root / CONTRACT).is_file() and (root / REVIEW_TEMPLATE).is_file(), \
-        "Framework source root lacks the reviewed contract and review template: " + str(root)
+    require((root / CONTRACT).is_file() and (root / REVIEW_TEMPLATE).is_file(),
+            "Framework source root lacks the reviewed contract and review template: " + str(root))
     return root
 
 def sha(path):
@@ -82,15 +88,15 @@ def main():
     oracle = args.oracle_file.resolve(strict=True)
     oracle_bytes = oracle.read_bytes()
     expected = json.loads(oracle_bytes)
-    assert valid_oracle(args.profile, expected), ("Independent RouteGuide oracle must have a string name and closed integer Point location"
-            if args.profile == "routeguide.getfeature.v1" else "Independent oracle must have one string message")
-    assert len(oracle_bytes) <= 65536
+    require(valid_oracle(args.profile, expected), ("Independent RouteGuide oracle must have a string name and closed integer Point location"
+            if args.profile == "routeguide.getfeature.v1" else "Independent oracle must have one string message"))
+    require(len(oracle_bytes) <= 65536, "Independent oracle exceeds 65536 bytes")
     lease_file = fixture / "fixtures/lease.json"
-    assert sha(lease_file) == args.fixture_lease_sha256, "Fixture lease differs from independent pin"
+    require(sha(lease_file) == args.fixture_lease_sha256, "Fixture lease differs from independent pin")
     lease = json.loads(lease_file.read_bytes())
-    assert lease["profile"] == args.profile
+    require(lease["profile"] == args.profile, "Fixture lease profile differs from requested profile")
     jar = args.framework_jar.resolve(strict=True)
-    assert sha(jar) == args.framework_sha256
+    require(sha(jar) == args.framework_sha256, "Framework artifact differs from supplied pin")
     work = args.output_dir.resolve()
     work.mkdir(parents=True, exist_ok=False)
     suite = work / "suite"
@@ -126,11 +132,11 @@ def main():
     if args.review_metadata_file is not None:
         metadata_path = args.review_metadata_file.resolve(strict=True)
         metadata_bytes = metadata_path.read_bytes()
-        assert len(metadata_bytes) <= 65536
+        require(len(metadata_bytes) <= 65536, "Review metadata exceeds 65536 bytes")
         metadata = json.loads(metadata_bytes)
         allowed = {"review_ref", "reviewed_by", "reviewed_at", "valid_until", "workspace_ref", "project_ref", "repository_revisions", "swarm_source", "framework_baseline", "requirement_ref"}
         required = allowed - {"requirement_ref"}
-        assert isinstance(metadata, dict) and required <= set(metadata) <= allowed, "Review metadata fields must be exact and independently supplied"
+        require(isinstance(metadata, dict) and required <= set(metadata) <= allowed, "Review metadata fields must be exact and independently supplied")
         requirement_ref = metadata.pop("requirement_ref", requirement_ref)
         review.update(metadata)
         metadata_identity = {"path": str(metadata_path), "sha256": sha(metadata_path)}
@@ -146,7 +152,7 @@ def main():
         result = subprocess.run([java, "-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-jar", str(jar), "prepare-product-test-handoff",
             "--suite", str(suite / "suite_manifest.yaml"), "--profile", profile, "--review-input", str(suite / "review-input.json"),
             "--out", str(suite / "handoff/reviewed-tests.json")], stdout=out, stderr=err, timeout=30, cwd=work)
-    assert result.returncode == 0, (work / "prepare.stderr.log").read_text() + (work / "prepare.stdout.log").read_text()
+    require(result.returncode == 0, (work / "prepare.stderr.log").read_text() + (work / "prepare.stdout.log").read_text())
     command = [sys.executable, "-B", str(Path(__file__).with_name("smoke.py")), "--framework-jar", str(jar),
         "--framework-sha256", args.framework_sha256, "--suite-dir", str(suite), "--handoff-sha256", sha(suite / "handoff/reviewed-tests.json"),
         "--fixture-lease-sha256", args.fixture_lease_sha256, "--expect-verdict", args.expect_verdict,
@@ -155,7 +161,7 @@ def main():
         command.append("--via-host")
     with (work / "module.stdout.log").open("w") as out, (work / "module.stderr.log").open("w") as err:
         result = subprocess.run(command, stdout=out, stderr=err, timeout=90, cwd=work)
-    assert result.returncode == 0, (work / "module.stderr.log").read_text()
+    require(result.returncode == 0, (work / "module.stderr.log").read_text())
     write(work / "independent-inputs.json", {"profile": args.profile, "fixture_lease_sha256": args.fixture_lease_sha256,
           "oracle_path": str(oracle), "oracle_sha256": sha(oracle), "expected_verdict": args.expect_verdict,
           "source_descriptor_sha256": sha(fixture / "fixtures" / descriptor), "review_metadata": metadata_identity})
