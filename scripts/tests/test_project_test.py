@@ -185,11 +185,33 @@ class ProjectTest(unittest.TestCase):
         self.assertEqual("product_or_test_oracle_needs_triage", handoff["root_cause"])
         self.assertEqual(["FAIL-1"], [case["id"] for case in handoff["cases"]])
 
+    def test_failure_details_include_observed_evidence_and_owner_action(self):
+        canonical = {
+            "run_id": "RUN-1",
+            "product_test": {"repository_revisions": {"example/project": "a" * 40}},
+            "failure": {"code": "ASSERTION_FAILED", "classification": "VERIFICATION_FAILED",
+                        "reason": "Assertion `exit_code_matches` failed.", "owner_action": "Review assertion evidence."},
+            "step_results": [{"id": "invoke", "status": "passed", "outputs": {"exit_code": 2}}],
+            "verify_results": [{"id": "exit_code_matches", "status": "failed", "evidence_ref": "assertions/x.yaml"}],
+            "evidence_refs": ["assertions/x.yaml", "result.json"],
+        }
+        details = FLOW.failure_details(canonical)
+        self.assertEqual("ASSERTION_FAILED", details["failure_code"])
+        self.assertEqual("VERIFICATION_FAILED", details["failure_classification"])
+        self.assertEqual("Assertion `exit_code_matches` failed.", details["failure_reason"])
+        self.assertEqual("Review assertion evidence.", details["owner_action"])
+        self.assertEqual("RUN-1", details["run_id"])
+        self.assertEqual({"example/project": "a" * 40}, details["repository_revisions"])
+        self.assertEqual(2, details["observed_steps"][0]["outputs"]["exit_code"])
+        self.assertEqual("assertions/x.yaml", details["verify_results"][0]["evidence_ref"])
+        self.assertEqual(["assertions/x.yaml", "result.json"], details["evidence_refs"])
+
     def test_blocked_without_failure_does_not_create_coder_handoff(self):
         summary = FLOW.report_summary([{"id": "BLOCKED-1", "status": "BLOCKED"}],
                                       [{"status": "BLOCKED"}], [], status="INCOMPLETE")
         self.assertFalse(summary["coder_handoff"]["required"])
         self.assertEqual("not_applicable", summary["coder_handoff"]["root_cause"])
+
 
     def test_markdown_summary_is_human_readable_and_contains_coder_handoff(self):
         inventory = FLOW.read(self.repo / "test-inventory.json")["entries"]
