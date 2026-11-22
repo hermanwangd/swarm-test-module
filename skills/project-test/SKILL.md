@@ -121,9 +121,12 @@ issue comment, notification or deployment is authorized by this skill.
 
    The helper calls the pinned module CLI, which calls the pinned existing
    Framework. It keeps request/receipt/stderr/canonical result for each case and
-   writes `report.json`, with a result for every AC. FAIL stays FAIL; blocked,
-   skipped or absent execution never counts as PASS. Preserve the first run and
-   use a fresh directory after repairs; changed inputs require a new review.
+   writes `report.json`, with a result for every AC and a summary of case,
+   requirement, inventory and code-coverage counts. FAIL stays FAIL; blocked,
+   skipped or absent execution never counts as PASS. A FAIL creates a coder
+   handoff with the linked evidence and a triage request; it does not claim the
+   root cause is already proven. Preserve the first run and use a fresh directory
+   after repairs; changed inputs require a new review.
 
 6. Return concrete case/AC counts, failures with expected/actual and evidence
    links, uncovered requirements, tested version and environment. Describe the

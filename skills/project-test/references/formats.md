@@ -129,9 +129,23 @@ missing evidence:
     "sha256": "sha256-of-the-checked-in-inventory"
   },
   "requirements": [{"requirement": "AC-1", "status": "PASS", "cases": ["TC-1"]}],
+  "summary": {
+    "status": "PASS",
+    "cases": {"total": 1, "passed": 1, "failed": 0, "blocked": 0, "untested": 0},
+    "requirements": {"total": 1, "passed": 1, "failed": 0, "blocked": 0, "untested": 0},
+    "test_inventory": {"total": 1, "reuse": 1, "update": 0, "add": 0, "retire": 0},
+    "code_coverage": {"status": "NOT_COLLECTED"},
+    "coder_handoff": {"required": false, "assignee": null, "root_cause": "not_applicable", "cases": []}
+  },
   "status": "PASS"
 }
 ```
+
+When a reviewed case FAILs, `summary.coder_handoff.required` is true. The handoff
+names the coder as the next owner, but marks the root cause as needing triage
+between product code and the reviewed oracle. It links the receipt/result evidence
+and asks for a fresh reviewed rerun after the fix. BLOCKED or UNTESTED cases do not
+become coder work unless a FAIL is present.
 
 A reused existing test still needs an execution record from the applicable native
 runner. A citation to an old test is not itself execution evidence. New or updated
