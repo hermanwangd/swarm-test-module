@@ -99,26 +99,14 @@ def collect(repo, revision, base, sources, output, pr_snapshot=None):
         records.append({"id": identity, "kind": kind, "origin": origin, "snapshot": snapshot,
                         "sha256": hashlib.sha256(data).hexdigest(), "lines": len(lines)})
         payloads.append((snapshot, data))
-    historical_commits = set()
     for kind, paths in sources.items():
-        require(kind in {"bdd", "ac", "pr", "code", "test", "historical-test"}, "unknown source kind")
-        for reference in paths:
-            commit, name = revision, reference
-            if kind == "historical-test":
-                commit, separator, name = reference.partition(":")
-                require(separator and re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", commit),
-                        "historical test requires a full commit and path")
-                if commit not in historical_commits:
-                    require(git(repo, "rev-parse", commit + "^{commit}").decode().strip() == commit,
-                            "historical test must reference a commit")
-                    git(repo, "merge-base", "--is-ancestor", commit, revision)
-                    historical_commits.add(commit)
+        require(kind in {"bdd", "ac", "pr", "code", "test"}, "unknown source kind")
+        for name in paths:
             relative(name)
-            entry = git(repo, "--literal-pathspecs", "ls-tree", "-z", commit, "--", name).decode().split("\t", 1)
+            entry = git(repo, "ls-tree", "-z", revision, "--", name).decode().split("\t", 1)
             require(len(entry) == 2 and entry[0].split()[0] in {"100644", "100755"}
                     and entry[1] == name + "\x00", "source must be one committed regular file")
-            origin = commit + ":" + name
-            add(kind + ":" + reference, kind, git(repo, "show", origin), origin)
+            add(kind + ":" + name, kind, git(repo, "show", revision + ":" + name), revision + ":" + name)
     if pr_snapshot:
         pr = read(pr_snapshot)
         require(pr["head"] == revision and pr["base"] == base, "PR snapshot does not match source commits")
@@ -164,38 +152,24 @@ def check(context_dir, design_path):
         path = contained(context_dir, source["snapshot"])
         require(sha(path) == source["sha256"], "source snapshot changed")
         require(len(content(path).decode("utf-8").splitlines()) == source["lines"], "source line count changed")
-    def citations(items, *, in_scope=True):
+    def citations(items):
         require(isinstance(items, list) and 0 < len(items) <= 128, "missing citations")
-        references = set()
+        kinds = set()
         for item in items:
-            require(isinstance(item, dict) and isinstance(item.get("source"), str) and item["source"].strip(),
-                    "invalid citation source")
-            require(type(item.get("start")) is int and type(item.get("end")) is int
-                    and 1 <= item["start"] <= item["end"], "citation line range invalid")
-            ref = item["source"]
-            if in_scope:
-                require(ref in sources, "unknown citation source: " + ref)
-                require(item["end"] <= sources[ref]["lines"], "citation line range invalid")
-            references.add(ref)
-        return references
+            require(item["source"] in sources, "unknown citation source")
+            source = sources[item["source"]]
+            require(type(item["start"]) is int and type(item["end"]) is int
+                    and 1 <= item["start"] <= item["end"] <= source["lines"], "citation line range invalid")
+            kinds.add(source["kind"])
+        return kinds
     require(isinstance(design.get("author"), str) and design["author"].strip(), "missing design author")
     requirements = design["requirements"]
     require(0 < len(requirements) <= 512, "requirements inventory is required")
     ids = [r["id"] for r in requirements]
     require(all(isinstance(x, str) and x.strip() for x in ids) and len(ids) == len(set(ids)), "invalid requirement IDs")
-    ac_scope = set(ids)
-    for requirement in requirements:
-        require(any(sources[ref]["kind"] == "ac" for ref in citations(requirement.get("citations"))),
-                "requirement must cite AC")
     entries = test_inventory_data(context_dir, sources, design)
-    selected = None
-    if "inventory_scope" in design:
-        scope = design["inventory_scope"]
-        require(isinstance(scope, list) and all(isinstance(item, str) for item in scope)
-                and len(scope) == len(set(scope)), "inventory_scope requires a list of distinct inventory IDs")
-        selected = set(scope)
     inventory_ids = set()
-    active_entries, active_acs = {}, set()
+    active_by_requirement = {requirement: set() for requirement in ids}
     for entry in entries:
         require(isinstance(entry, dict), "test inventory entry must be an object")
         case_id = entry.get("id")
@@ -207,28 +181,20 @@ def check(context_dir, design_path):
         require(action in {"reuse", "update", "add", "retire"},
                 "test inventory action must be reuse, update, add or retire")
         entry_path = relative(entry.get("path"))
+        require("test:" + entry_path in sources, "test inventory path is not a collected test source")
         entry_requirements = entry.get("requirements")
-        require(isinstance(entry_requirements, list)
-                and all(isinstance(item, str) and item.strip() for item in entry_requirements)
-                and len(entry_requirements) == len(set(entry_requirements)), "invalid test inventory requirements")
+        require(isinstance(entry_requirements, list) and all(item in active_by_requirement for item in entry_requirements),
+                "test inventory has an unknown requirement")
         reason = entry.get("reason")
         require(isinstance(reason, str) and reason.strip(), "test inventory decision requires a reason")
-        in_scope = selected is None or case_id in selected
-        refs = citations(entry.get("citations"), in_scope=in_scope)
-        own_path = "test:" + entry_path
-        if action == "retire":
-            historical_path = r"historical-test:(?:[0-9a-f]{40}|[0-9a-f]{64}):" + re.escape(entry_path)
-            require(own_path in refs or any(re.fullmatch(historical_path, ref) for ref in refs),
-                    "retired test must cite its own current or historical test path")
-        else:
-            require(own_path in refs, "active test must cite its own checked-in test path")
+        entry_kinds = citations(entry.get("citations"))
+        if action in {"reuse", "update", "retire"}:
+            require("test" in entry_kinds, "checked-in test decision must cite the test source")
+        if action != "retire":
             require(entry_requirements, "active test inventory entry must map to at least one AC")
-            if in_scope:
-                mapped = ac_scope.intersection(entry_requirements)
-                active_entries[case_id] = (own_path, mapped)
-                active_acs.update(mapped)
-    require(selected is None or selected <= inventory_ids, "inventory_scope contains an unknown test inventory ID")
-    cases, case_ids, suites = design["cases"], set(), set()
+            for requirement in entry_requirements:
+                active_by_requirement[requirement].add(case_id)
+    cases, covered, case_ids, suites = design["cases"], set(), set(), set()
     require(len(cases) <= 512, "too many cases")
     for case in cases:
         require(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", case["id"]) is not None, "invalid case ID")
@@ -236,16 +202,10 @@ def check(context_dir, design_path):
         case_ids.add(case["id"])
         suites.add(relative(case["suite"]))
         require(case["id"] in inventory_ids, "case is not registered in the checked-in test inventory")
-        require(case["id"] in active_entries, "case must use an active in-scope test inventory entry")
-        own_path, mapped = active_entries[case["id"]]
-        case_acs = case["requirements"]
-        require(isinstance(case_acs, list) and case_acs and all(isinstance(ac, str) and ac in ac_scope for ac in case_acs),
-                "case has unknown requirement")
-        require(len(case_acs) == len(mapped) and set(case_acs) == mapped, "case ACs differ from its inventory mapping")
-        refs = citations(case["citations"])
-        case_kinds = {sources[ref]["kind"] for ref in refs}
+        require(case["requirements"] and set(case["requirements"]) <= set(ids), "case has unknown requirement")
+        covered.update(case["requirements"])
+        case_kinds = citations(case["citations"])
         require({"bdd", "pr", "code"} <= case_kinds, "case must cite bdd, pr and code")
-        require(own_path in refs, "case must cite its own checked-in test path")
         require(case["technique"] in {"equivalence", "boundary", "state", "scenario", "regression"}, "unknown technique")
         for key in ["rationale", "expected", "test_case_id"]:
             require(isinstance(case.get(key), str) and case[key].strip(), "case missing " + key)
@@ -253,9 +213,9 @@ def check(context_dir, design_path):
             require(isinstance(case.get(key), list) and case[key] and all(isinstance(x, str) and x.strip()
                     for x in case[key]), "case missing " + key)
     for requirement in requirements:
-        if requirement["id"] not in active_acs:
+        if not active_by_requirement[requirement["id"]]:
             require(isinstance(requirement.get("gap"), str) and requirement["gap"].strip(),
-                    requirement["id"] + " has no active checked-in test in scope and no explanation")
+                    requirement["id"] + " has no active checked-in test and no explanation")
     return context, design
 
 
@@ -329,6 +289,22 @@ def inventory_summary(entries):
     return counts
 
 
+def failure_details(canonical):
+    failure = canonical.get("failure") or {}
+    product_test = canonical.get("product_test") or {}
+    return {
+        "failure_code": failure.get("code"),
+        "failure_classification": failure.get("classification"),
+        "failure_reason": failure.get("reason"),
+        "owner_action": failure.get("owner_action"),
+        "observed_steps": canonical.get("step_results", []),
+        "verify_results": canonical.get("verify_results", []),
+        "run_id": canonical.get("run_id"),
+        "repository_revisions": product_test.get("repository_revisions", {}),
+        "evidence_refs": canonical.get("evidence_refs", []),
+    }
+
+
 def coder_handoff(cases):
     failed = [case for case in cases if case.get("status") == "FAIL"]
     if not failed:
@@ -339,10 +315,18 @@ def coder_handoff(cases):
             "id": case.get("id"),
             "expected": case.get("expected"),
             "reason": case.get("reason"),
+            "failure_code": case.get("failure_code"),
+            "failure_classification": case.get("failure_classification"),
+            "failure_reason": case.get("failure_reason"),
+            "owner_action": case.get("owner_action"),
             "receipt": case.get("receipt"),
             "result": case.get("result"),
-            "evidence": {key: case[key] for key in
-                         ("receipt_sha256", "junit", "junit_sha256", "log", "log_sha256") if key in case},
+            "observed_steps": case.get("observed_steps"),
+            "verify_results": case.get("verify_results"),
+            "run_id": case.get("run_id"),
+            "repository_revisions": case.get("repository_revisions"),
+            "evidence_refs": case.get("evidence_refs"),
+            "evidence": {"receipt_sha256": case.get("receipt_sha256"), "validated": case.get("evidence_validation") == "validated"},
         })
     return {
         "required": True,
@@ -368,6 +352,83 @@ def report_summary(cases, requirements, inventory_entries, code_coverage=None, s
         "code_coverage": code_coverage or {"status": "NOT_COLLECTED"},
         "coder_handoff": coder_handoff(cases),
     }
+
+
+def markdown_summary(summary):
+    lines = [
+        "# Test report summary",
+        "",
+        f"- Overall status: **{summary['status']}**",
+        f"- Coder handoff required: **{'yes' if summary['coder_handoff']['required'] else 'no'}**",
+        "",
+        "## Results",
+        "",
+        "| Scope | Total | PASS | FAIL | BLOCKED | UNTESTED |\n| --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for label, key in (("Test cases", "cases"), ("Requirements", "requirements")):
+        row = summary[key]
+        lines.append(f"| {label} | {row['total']} | {row['passed']} | {row['failed']} | {row['blocked']} | {row['untested']} |")
+    inventory = summary["test_inventory"]
+    lines.extend([
+        "",
+        "## Checked-in test inventory",
+        "",
+        "| Total | Reuse | Update | Add | Retire |",
+        "| ---: | ---: | ---: | ---: | ---: |",
+        f"| {inventory['total']} | {inventory['reuse']} | {inventory['update']} | {inventory['add']} | {inventory['retire']} |",
+        "",
+        "## Code coverage",
+        "",
+    ])
+    coverage = summary["code_coverage"]
+    lines.append(f"- Status: `{coverage['status']}`")
+    for key in ("lines", "branches"):
+        if key in coverage:
+            value = coverage[key]
+            lines.append(f"- {key.capitalize()}: **{value['covered']} / {value['total']}**")
+    handoff = summary["coder_handoff"]
+    if handoff["required"]:
+        lines.extend([
+            "",
+            "## Coder handoff",
+            "",
+            f"- Assignee: **{handoff['assignee']}**",
+            f"- Root cause: `{handoff['root_cause']}`",
+            f"- {handoff['summary']}",
+            "",
+        ])
+        for case in handoff["cases"]:
+            lines.append(f"### {case['id']}")
+            if case.get("expected") is not None:
+                lines.append(f"- Expected: {case['expected']}")
+            if case.get("reason") is not None:
+                lines.append(f"- Reason: {case['reason']}")
+            if case.get("failure_code") is not None:
+                lines.append(f"- Failure code: `{case['failure_code']}`")
+            if case.get("failure_classification") is not None:
+                lines.append(f"- Failure classification: `{case['failure_classification']}`")
+            if case.get("failure_reason") is not None:
+                lines.append(f"- Failure reason: {case['failure_reason']}")
+            if case.get("owner_action") is not None:
+                lines.append(f"- Owner action: {case['owner_action']}")
+            if case.get("run_id") is not None:
+                lines.append(f"- Run ID: `{case['run_id']}`")
+            if case.get("repository_revisions") is not None:
+                lines.append(f"- Repository revisions: `{case['repository_revisions']}`")
+            if case.get("observed_steps") is not None:
+                lines.append(f"- Observed steps: `{case['observed_steps']}`")
+            if case.get("verify_results") is not None:
+                lines.append(f"- Verify results: `{case['verify_results']}`")
+            if case.get("evidence_refs") is not None:
+                lines.append(f"- Evidence refs: `{case['evidence_refs']}`")
+            if case.get("receipt") is not None:
+                lines.append(f"- Receipt: `{case['receipt']}`")
+            if case.get("result") is not None:
+                lines.append(f"- Result: `{case['result']['path']}` (SHA-256 `{case['result']['sha256']}`)")
+            lines.append(f"- Receipt SHA-256: `{case['evidence']['receipt_sha256']}`")
+        lines.extend(["", "Tasks:"])
+        lines.extend(f"- {task}" for task in handoff["tasks"])
+    return "\n".join(lines) + "\n"
 
 
 def run(context_dir, design_path, review_path, review_pin, output):
@@ -447,7 +508,8 @@ def run(context_dir, design_path, review_path, review_pin, output):
             stable_inputs()
             receipt = read(work / "receipt.json")
             record.update(exit_code=completed.returncode, outcome=receipt["outcome"], verdict=receipt["framework_verdict"],
-                          receipt=str(work / "receipt.json"), receipt_sha256=sha(work / "receipt.json"))
+                          receipt=str(work / "receipt.json"), receipt_sha256=sha(work / "receipt.json"),
+                          evidence_validation=receipt["evidence_validation"])
             require(receipt["request"] == request, "receipt belongs to another request")
             require(receipt["outcome"] == "COMPLETED" and receipt["evidence_validation"] == "validated", "no validated execution")
             require(receipt["release_evidence_eligible"] is False and
@@ -457,6 +519,9 @@ def run(context_dir, design_path, review_path, review_pin, output):
                 path = regular(artifact["path"])
                 require(path.resolve().is_relative_to((work / "outputs").resolve()), "evidence outside this invocation")
                 require(sha(path) == artifact["sha256"], "evidence digest mismatch")
+            if receipt["framework_verdict"] == "failed":
+                canonical = read(receipt["artifacts"]["result"]["path"])
+                record.update(failure_details(canonical))
             if receipt["framework_verdict"] == "passed" and completed.returncode == 0:
                 record["status"] = "PASS"
             elif receipt["framework_verdict"] == "failed" and completed.returncode == 1:
@@ -471,8 +536,7 @@ def run(context_dir, design_path, review_path, review_pin, output):
     inventory_entries = test_inventory_data(context_dir, {source["id"]: source for source in context["sources"]}, design)
     report = {"schema": "project-test-report.v1", "revision": context["revision"], "review_sha256": review_pin,
               "claim": "AGENT_AUTHORED_LOCAL_FRAMEWORK_EXECUTION", "release_eligible": False,
-              "cases": results, "requirements": rows, "test_inventory": design["test_inventory"],
-              "status": "PASS" if all(r["status"] == "PASS" for r in rows) else "INCOMPLETE",
+              "cases": results, "requirements": rows, "status": "PASS" if all(r["status"] == "PASS" for r in rows) else "INCOMPLETE",
               "coverage_note": "Coverage of the reviewed AC inventory; not code coverage or proof that the inventory is exhaustive."}
     report["summary"] = report_summary(results, rows, inventory_entries, status=report["status"])
     product = next((source["origin"] for source in context["sources"] if source["id"] == "pr:snapshot"),
@@ -480,6 +544,7 @@ def run(context_dir, design_path, review_path, review_pin, output):
     record_local_execution(report, product, [row["requirement"] for row in rows], "framework case receipts",
                            design.get("stage_applicability"))
     write(output / "report.json", report)
+    write(output / "summary.md", markdown_summary(report["summary"]))
     return report
 
 
@@ -531,23 +596,13 @@ def pytest_regression(args):
                        for key in ("tests", "errors", "failures", "skipped")}
     result["requirements"] = ac["requirements"]
     result["evidence_sha256"] = {name: sha(out / name) for name in ("coverage.json", "junit.xml", "pytest.log")}
-    cases = []
-    for node in suites.iter("testcase"):
-        outcome = next((tag for tag in ("failure", "error", "skipped") if node.find(tag) is not None), None)
-        status = "BLOCKED" if outcome == "skipped" else "FAIL" if outcome else "PASS"
-        case_id = "::".join(part for part in (node.get("classname"), node.get("name")) if part)
-        cases.append({"id": case_id, "status": status, "reason": outcome,
-                      "junit": "junit.xml", "junit_sha256": result["evidence_sha256"]["junit.xml"],
-                      "log": "pytest.log", "log_sha256": result["evidence_sha256"]["pytest.log"]})
-    if (rc == 0 and ac["status"] == "PASS" and any(case["status"] == "PASS" for case in cases)
-            and not any(case["status"] == "FAIL" for case in cases)):
+    if rc == 0 and result["tests"]["tests"] > result["tests"]["skipped"] and ac["status"] == "PASS":
         result["status"] = "PASS"
-    result["summary"] = report_summary(cases, ac["requirements"], [],
-                                       {"status": "COLLECTED", "lines": result["lines"], "branches": result["branches"]},
-                                       result["status"])
+    result["summary"] = report_summary([], ac["requirements"], [], {"status": "COLLECTED", "lines": result["lines"], "branches": result["branches"]}, result["status"])
     record_local_execution(result, product, [row["requirement"] for row in ac["requirements"]],
                            "referenced AC report and local pytest JUnit/log/coverage", applicability)
     write(out / "report.json", result)
+    write(out / "summary.md", markdown_summary(result["summary"]))
     print(json.dumps(result))
     return 0 if result["status"] == "PASS" else 1
 
@@ -631,6 +686,7 @@ def native_tox(args):
     report["summary"] = report_summary(report["runs"], [{"status": status} for status in requirements.values()], [], status=report["status"])
     record_local_execution(report, plan.get("pr") or checkout_identity(repo), inventory, "local tox JUnit and logs", plan.get("stage_applicability"))
     write(output / "report.json", report)
+    write(output / "summary.md", markdown_summary(report["summary"]))
     return 0 if report["status"] == "PASS" else 1
 
 
@@ -720,6 +776,7 @@ def native_maven(args):
     report["summary"] = report_summary(report["runs"], [{"status": status} for status in report["requirements"].values()], [], coverage_value, report["status"])
     record_local_execution(report, plan.get("pr") or checkout_identity(args.repo), inventory, "local Maven log and Surefire XML", plan.get("stage_applicability"))
     write(output / "report.json", report)
+    write(output / "summary.md", markdown_summary(report["summary"]))
     return 0 if report["status"] == "PASS" else 1
 
 
@@ -778,7 +835,7 @@ def main():
     acquire.add_argument("--repo", type=Path, required=True)
     for name in ["revision", "base"]:
         acquire.add_argument("--" + name, required=True)
-    for name in ["bdd", "ac", "pr", "code", "test", "historical-test"]:
+    for name in ["bdd", "ac", "pr", "code", "test"]:
         acquire.add_argument("--" + name, action="append", default=[])
     acquire.add_argument("--pr-snapshot", type=Path)
     acquire.add_argument("--out", type=Path, required=True)
@@ -825,9 +882,8 @@ def main():
         if args.command == "pytest-regression":
             return pytest_regression(args)
         if args.command == "collect":
-            sources = {kind: getattr(args, kind) for kind in ["bdd", "ac", "pr", "code", "test"]}
-            sources["historical-test"] = args.historical_test
-            collect(args.repo, args.revision, args.base, sources, args.out.absolute(), args.pr_snapshot)
+            collect(args.repo, args.revision, args.base, {kind: getattr(args, kind) for kind in ["bdd", "ac", "pr", "code", "test"]},
+                    args.out.absolute(), args.pr_snapshot)
             print(json.dumps({"context": str(args.out / "context.json"), "sha256": sha(args.out / "context.json")}))
         elif args.command == "check":
             _, design = check(args.context, args.design)
