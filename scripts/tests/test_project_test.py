@@ -27,25 +27,41 @@ class ProjectTest(unittest.TestCase):
         for name, content in {"behavior.feature": "Feature: command\nScenario: invalid command\nThen reject it\n",
                               "AC.md": "AC-1: reject unknown commands\nAC-2: require a deployment binding\n",
                               "PR.md": "Change: package the command as an executable JAR\n",
-                              "Main.java": "class Main {}\n"}.items():
+                              "Main.java": "class Main {}\n",
+                              "MainTest.java": "class MainTest { void rejectsUnknownCommand() {} }\n",
+                              "test-inventory.json": """{
+  \"schema\": \"project-test-inventory.v1\",
+  \"entries\": [
+    {\"id\": \"MainTest.rejectsUnknownCommand\", \"path\": \"MainTest.java\", \"requirements\": [\"AC-1\"],
+     \"action\": \"reuse\", \"reason\": \"Existing assertion covers the rejected-command behavior\",
+     \"citations\": [{\"source\": \"test:MainTest.java\", \"start\": 1, \"end\": 1}]},
+    {\"id\": \"TC-1\", \"path\": \"MainTest.java\", \"requirements\": [\"AC-1\"],
+     \"action\": \"update\", \"reason\": \"Framework case extends the checked-in assertion\",
+     \"citations\": [{\"source\": \"test:MainTest.java\", \"start\": 1, \"end\": 1}]}
+  ]
+}\n"""}.items():
             (self.repo / name).write_text(content)
         git("add", ".")
         git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "baseline")
         self.revision = git("rev-parse", "HEAD")
         self.context = self.root / "context"
         FLOW.collect(self.repo, self.revision, self.revision,
-                     {"bdd": ["behavior.feature"], "ac": ["AC.md"], "pr": ["PR.md"], "code": ["Main.java"]}, self.context)
+                     {"bdd": ["behavior.feature"], "ac": ["AC.md"], "pr": ["PR.md"], "code": ["Main.java"],
+                      "test": ["MainTest.java", "test-inventory.json"]}, self.context)
+        inventory_path = self.repo / "test-inventory.json"
         self.design = {
-            "schema": "project-test-design.v1", "author": "test-qa",
+            "schema": "project-test-design.v2", "author": "test-qa",
             "context_sha256": FLOW.sha(self.context / "context.json"),
             "requirements": [
                 {"id": "AC-1", "citations": [{"source": "ac:AC.md", "start": 1, "end": 1}], "gap": None},
                 {"id": "AC-2", "citations": [{"source": "ac:AC.md", "start": 2, "end": 2}], "gap": "No deployment available"}],
+            "test_inventory": {"path": "test-inventory.json", "sha256": FLOW.sha(inventory_path)},
             "cases": [{"id": "TC-1", "requirements": ["AC-1"], "technique": "equivalence",
                        "rationale": "Invalid command class", "preconditions": ["Executable JAR built"],
                        "steps": ["Invoke an unknown command"], "expected": "Reject with usage and exit 2",
                        "citations": [{"source": f"{kind}:{name}", "start": 1, "end": 1} for kind, name in
-                                     [("bdd", "behavior.feature"), ("pr", "PR.md"), ("code", "Main.java")]],
+                                     [("bdd", "behavior.feature"), ("pr", "PR.md"), ("code", "Main.java"),
+                                      ("test", "MainTest.java")]],
                        "suite": "suites/rejected-command", "test_case_id": "TC-1"}]}
 
     def save_design(self):
@@ -92,7 +108,7 @@ class ProjectTest(unittest.TestCase):
 
     def test_missing_ac_mapping_and_missing_gap_are_rejected(self):
         self.design["requirements"][1]["gap"] = None
-        with self.assertRaisesRegex(ValueError, "AC-2.*uncovered"):
+        with self.assertRaisesRegex(ValueError, "AC-2.*no active checked-in test"):
             FLOW.check(self.context, self.save_design())
         self.design["requirements"][1]["gap"] = "Not runnable"
         self.design["cases"][0]["requirements"] = ["invented"]
@@ -102,6 +118,37 @@ class ProjectTest(unittest.TestCase):
     def test_case_requires_bdd_pr_and_code_evidence(self):
         self.design["cases"][0]["citations"] = self.design["cases"][0]["citations"][:1]
         with self.assertRaisesRegex(ValueError, "bdd, pr and code"):
+            FLOW.check(self.context, self.save_design())
+
+
+    def test_checked_in_inventory_is_required_and_digest_pinned(self):
+        original = self.design.pop("test_inventory")
+        with self.assertRaisesRegex(ValueError, "test inventory"):
+            FLOW.check(self.context, self.save_design())
+        self.design["test_inventory"] = dict(original, sha256="0" * 64)
+        with self.assertRaisesRegex(ValueError, "digest"):
+            FLOW.check(self.context, self.save_design())
+
+    def test_inventory_reuse_requires_test_citation_and_cases_are_registered(self):
+        def replace_inventory(entries):
+            context = FLOW.read(self.context / "context.json")
+            source = next(item for item in context["sources"] if item["id"] == "test:test-inventory.json")
+            snapshot = self.context / source["snapshot"]
+            FLOW.write(snapshot, {"schema": "project-test-inventory.v1", "entries": entries})
+            source["sha256"] = FLOW.sha(snapshot)
+            source["lines"] = len(snapshot.read_text().splitlines())
+            FLOW.write(self.context / "context.json", context)
+            self.design["context_sha256"] = FLOW.sha(self.context / "context.json")
+            self.design["test_inventory"]["sha256"] = source["sha256"]
+        inventory = FLOW.read(self.repo / "test-inventory.json")
+        without_citation = [dict(entry) for entry in inventory["entries"]]
+        without_citation[0]["citations"] = []
+        replace_inventory(without_citation)
+        with self.assertRaisesRegex(ValueError, "citation"):
+            FLOW.check(self.context, self.save_design())
+
+        replace_inventory(inventory["entries"][:1])
+        with self.assertRaisesRegex(ValueError, "not registered"):
             FLOW.check(self.context, self.save_design())
 
     def test_report_never_counts_unexecuted_or_failed_requirements_as_pass(self):
