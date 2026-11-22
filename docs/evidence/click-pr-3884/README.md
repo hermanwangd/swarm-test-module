@@ -49,3 +49,5 @@ the PR head. See the [base JUnit output](native-tox/base-control.xml),
 log](native-tox/4.log) and [separate coverage measurement](native-tox/coverage-summary.json).
 The plan and tests were prepared in this workspace. Formal ENGCIM agent execution
 and independent native-plan review are unverified.
+
+A separate [product CI receipt](product-ci.json) records the real GitHub Actions workflow, returned jobs and selected checkout log. The remote runner tested the PR merge ref. Workflow success and local supplemental case results retain separate scopes.

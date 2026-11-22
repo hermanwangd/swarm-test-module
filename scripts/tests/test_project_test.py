@@ -150,6 +150,30 @@ class ProjectTest(unittest.TestCase):
                 FLOW.run(self.context, self.save_design(), review, FLOW.sha(review), self.root / "run")
             launch.assert_not_called()
 
+    def test_remote_ci_binds_fork_pr_merge_checkout_and_preserves_evidence_scope(self):
+        head, merge = "a" * 40, "b" * 40
+        run = dict(id=4, run_attempt=2, name="Build", head_sha=head, event="pull_request",
+                   repository={"full_name": "a/b"}, pull_requests=[], status="completed", conclusion="success",
+                   html_url="https://github.com/a/b/actions/runs/4")
+        job = dict(id=8, name="tests", run_id=4, status="completed", conclusion="success",
+                   html_url=run["html_url"] + "/job/8")
+        prefix = "repos/a/b"
+        responses = {prefix + "/pulls/7": {"head": {"sha": head}},
+                     prefix + "/actions/runs?event=pull_request&head_sha=" + head + "&per_page=100":
+                     {"total_count": 1, "workflow_runs": [run]},
+                     prefix + "/actions/runs/4/attempts/2/jobs?per_page=100": {"total_count": 1, "jobs": [job]}}
+        log = f"time [command]/bin/git fetch origin +{merge}:refs/remotes/pull/7/merge\n"
+        log += "time [command]/bin/git log -1 --format=%H\ntime " + merge
+        def fetch(endpoint, raw=False):
+            return log if raw and endpoint == prefix + "/actions/jobs/8/logs" else responses[endpoint]
+        receipt = FLOW.github_ci("https://github.com/a/b/pull/7", "Build", "tests", fetch)
+        self.assertEqual(merge, receipt["inspected_job"]["checkout_sha"])
+        self.assertEqual(head, receipt["pr_head"])
+        self.assertEqual("NOT_VERIFIED", receipt["per_ac_verdict"])
+        log = log.replace("/7/merge", "/3/merge")
+        with self.assertRaisesRegex(ValueError, "not bound"):
+            FLOW.github_ci("https://github.com/a/b/pull/7", "Build", "tests", fetch)
+
     def test_local_evidence_cannot_promote_product_ci_or_sit(self):
         report = {"revision": self.revision, "requirements": {"AC1": "PASS", "AC2": "FAIL"}}
         FLOW.record_local_execution(report, "example/project", ["AC1", "AC2"], "local JUnit",

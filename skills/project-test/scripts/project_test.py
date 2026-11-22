@@ -558,6 +558,54 @@ def native_maven(args):
     return 0 if report["status"] == "PASS" else 1
 
 
+def github_ci(pr_url, workflow_name, job_name, fetch):
+    """Collect observed GitHub workflow and job results for the current PR head."""
+    match = re.fullmatch(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/([1-9]\d*)/?", pr_url)
+    require(match and not set(match.group(1).split("/")) & {".", ".."}, "expected a GitHub PR URL")
+    repo, number = match.groups()
+    prefix = f"repos/{repo}"
+    pr = fetch(f"{prefix}/pulls/{number}")
+    head = pr["head"]["sha"]
+    require(re.fullmatch("[0-9a-f]{40}", head), "invalid PR head")
+    results = fetch(f"{prefix}/actions/runs?event=pull_request&head_sha={head}&per_page=100")
+    runs = [r for r in results["workflow_runs"] if r["name"] == workflow_name and r["head_sha"] == head
+            and r["event"] == "pull_request" and r["repository"]["full_name"].lower() == repo.lower()
+            and (not r["pull_requests"] or any(str(p["number"]) == number for p in r["pull_requests"]))]
+    require(results["total_count"] == len(results["workflow_runs"]), "incomplete workflow listing")
+    require(runs, "no run bound to this PR, workflow and head")
+    run = max(runs, key=lambda r: r["id"])
+    attempt_url = f"{prefix}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100"
+    listing = fetch(attempt_url)
+    jobs = listing["jobs"]
+    require(listing["total_count"] == len(jobs) and all(j["run_id"] == run["id"] for j in jobs),
+            "incomplete or mismatched job listing")
+    selected = [j for j in jobs if j["name"] == job_name]
+    require(len(selected) == 1, "expected one matching product job")
+    job = selected[0]
+    log = fetch(f"{prefix}/actions/jobs/{job['id']}/logs", raw=True)
+    checkouts = re.findall(r"(?m)^\S+ \[command\][^\r\n]*git log -1 --format=%H\r?\n\S+ ([0-9a-f]{40})\s*$", log)
+    revisions = set(checkouts)
+    checkout_sha = revisions.pop() if len(revisions) == 1 else None
+    if not run["pull_requests"]:
+        merge_fetch = f"+{checkout_sha}:refs/remotes/pull/{number}/merge"
+        require(checkout_sha and any("[command]" in line and " fetch " in line and line.endswith(merge_fetch)
+                                     for line in log.splitlines()), "job checkout not bound to this PR")
+    return {"stage": "CI", "product": repo, "pr_url": pr_url, "pr_head": head,
+            "run_id": run["id"], "attempt": run["run_attempt"], "run_url": run["html_url"],
+            "workflow": workflow_name, "workflow_status": run["status"], "workflow_conclusion": run["conclusion"],
+            "returned_jobs": [{key: j[key] for key in ("id", "name", "status", "conclusion")} for j in jobs],
+            "inspected_job": {"id": job["id"], "name": job_name, "url": job["html_url"], "checkout_sha": checkout_sha,
+                              "log_sha256": hashlib.sha256(log.encode()).hexdigest()},
+            "per_ac_verdict": "NOT_VERIFIED", "required_checks_policy": "NOT_VERIFIED",
+            "post_cd_sit": "NOT_VERIFIED", "release_gate": "NOT_VERIFIED"}
+
+
+def fetch_github_api(endpoint, raw=False):
+    response = subprocess.run(["gh", "api", "--hostname", "github.com", endpoint], capture_output=True, timeout=90)
+    require(response.returncode == 0, f"GitHub API read failed: {endpoint}")
+    return response.stdout.decode() if raw else json.loads(response.stdout)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -594,8 +642,17 @@ def main():
     for field in ("repo", "plan", "out"):
         maven.add_argument("--" + field, type=Path, required=True)
     maven.add_argument("--plan-sha256", required=True)
+    ci = commands.add_parser("github-ci", help="Read remote product CI evidence through authenticated gh")
+    for field in ("pr", "workflow", "job"):
+        ci.add_argument("--" + field, required=True)
+    ci.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     try:
+        if args.command == "github-ci":
+            receipt = github_ci(args.pr, args.workflow, args.job, fetch_github_api)
+            args.out.mkdir(parents=True, exist_ok=False)
+            write(args.out / "product-ci.json", receipt)
+            return 0
         if args.command == "native-maven":
             return native_maven(args)
         if args.command == "native-tox":

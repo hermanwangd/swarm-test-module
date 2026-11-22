@@ -1,0 +1,106 @@
+{
+  "stage": "CI",
+  "product": "pallets/click",
+  "pr_url": "https://github.com/pallets/click/pull/3884",
+  "pr_head": "c53d3732b98c764932e146c007146ad402acb229",
+  "run_query": {
+    "event": "pull_request",
+    "commit_sha": "c53d3732b98c764932e146c007146ad402acb229"
+  },
+  "workflow": "Tests",
+  "run_url": "https://github.com/pallets/click/actions/runs/37474585369",
+  "workflow_status": "completed",
+  "workflow_conclusion": "success",
+  "returned_jobs": [
+    {
+      "id": 112306560825,
+      "name": "typing",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 112306561281,
+      "name": "3.13",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 112306561309,
+      "name": "Mac",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 112306561311,
+      "name": "3.14t",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 112306561351,
+      "name": "3.10",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 112306561367,
+      "name": "3.11",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 112306561395,
+      "name": "PyPy",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 112306561496,
+      "name": "3.14",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 112306561511,
+      "name": "3.12",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 112306562089,
+      "name": "Windows",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "inspected_job": {
+    "name": "3.12",
+    "id": 112306561511,
+    "url": "https://github.com/pallets/click/actions/runs/37474585369/job/112306561511",
+    "checkout_sha": "5f00213c187284d5852651a5dedf6c36a8c0d983",
+    "log_excerpts": [
+      "2026-10-06T13:54:54.6416985Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +5f00213c187284d5852651a5dedf6c36a8c0d983:refs/remotes/pull/3884/merge",
+      "2026-10-06T13:54:55.2700819Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/3884/merge",
+      "2026-10-06T13:54:55.2990044Z [command]/usr/bin/git log -1 --format=%H",
+      "2026-10-06T13:54:55.2991653Z 5f00213c187284d5852651a5dedf6c36a8c0d983",
+      "2026-10-06T13:55:04.8476377Z tests/test_options.py::test_show_envvar_empty[None-  --units TEXT\\n-None] PASSED [ 42%]",
+      "2026-10-06T13:55:04.8494466Z tests/test_options.py::test_show_envvar_empty[None-  --units TEXT\\n-envvar1] PASSED [ 42%]",
+      "2026-10-06T13:55:04.8510669Z tests/test_options.py::test_show_envvar_empty[None-  --units TEXT\\n-] PASSED [ 42%]",
+      "2026-10-06T13:55:04.8528311Z tests/test_options.py::test_show_envvar_empty[WEATHER-  --units TEXT  [env var: WEATHER_UNITS]\\n-None] PASSED [ 42%]",
+      "2026-10-06T13:55:04.8544288Z tests/test_options.py::test_show_envvar_empty[WEATHER-  --units TEXT  [env var: WEATHER_UNITS]\\n-envvar1] PASSED [ 42%]",
+      "2026-10-06T13:55:04.8560955Z tests/test_options.py::test_show_envvar_empty[WEATHER-  --units TEXT  [env var: WEATHER_UNITS]\\n-] PASSED [ 42%]",
+      "2026-10-06T13:55:04.8836992Z tests/test_options.py::test_missing_envvar_sequence[UNITS-'--units' (env var: 'UNITS')] PASSED [ 43%]",
+      "2026-10-06T13:55:04.8851708Z tests/test_options.py::test_missing_envvar_sequence[envvar1-'--units' (env var: 'UNITS')] PASSED [ 43%]",
+      "2026-10-06T13:55:04.8867224Z tests/test_options.py::test_missing_envvar_sequence[envvar2-'--units' (env var: 'WEATHER_UNITS', 'UNITS')] PASSED [ 43%]",
+      "2026-10-06T13:55:04.8884638Z tests/test_options.py::test_missing_envvar_sequence[envvar3-'--units' (env var: 'WEATHER_UNITS', 'UNITS')] PASSED [ 43%]",
+      "2026-10-06T13:55:04.8899989Z tests/test_options.py::test_missing_envvar_sequence[envvar4-'--units'] PASSED [ 43%]",
+      "2026-10-06T13:55:04.8915086Z tests/test_options.py::test_missing_envvar_sequence[-'--units'] PASSED   [ 43%]",
+      "2026-10-06T13:55:07.9719979Z ======== 2111 passed, 24 skipped, 31000 deselected, 1 xfailed in 6.97s ========="
+    ]
+  },
+  "returned_artifact_names": [],
+  "required_checks_policy": "NOT_VERIFIED",
+  "per_ac_verdict": "NOT_VERIFIED",
+  "post_cd_sit": "NOT_VERIFIED",
+  "release_gate": "NOT_VERIFIED"
+}

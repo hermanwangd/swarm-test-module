@@ -25,3 +25,5 @@ pre-existing preset-value precedence case passed on both revisions.
 Local Codex selected the product, inspected the PR, and authored the mapping.
 The QA Module executed the native runner. A production ENGCIM QA agent,
 independent blind reviewer and production mission ID were unavailable here.
+
+A separate [product CI receipt](product-ci.json) records the real GitHub Actions workflow, returned jobs and selected checkout log. The remote runner tested the PR merge ref. Workflow success and local supplemental case results retain separate scopes.

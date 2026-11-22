@@ -163,3 +163,21 @@ Declare stage applicability during AC design when the requirements establish it.
 Report local execution, product CI and post-CD SIT separately using the
 execution-stage contract in references/formats.md. Attribute package publishing
 and consumer-import CI to the module and consumer that actually ran those jobs.
+
+## Product CI evidence
+
+Discover the product test workflow and jobs from its pinned CI configuration.
+For GitHub Actions use the host's authenticated GitHub reader to query PR runs
+by head SHA, fetch the selected workflow's jobs, then inspect the checkout step
+and test results for the target matrix job. With authenticated gh available:
+
+    python3 <skill-dir>/scripts/project_test.py github-ci --pr <url> --workflow <workflow-name> --job <job-name> --out <fresh-directory>
+
+The receipt distinguishes the PR head from the commit checked out by the job,
+which can be a PR merge ref. If gh is unavailable, use the equivalent host
+GitHub connector calls. Preserve run and job URLs, observed checkout SHA and
+only relevant excerpts from authorized job logs. Identify first-page-only
+results. Match case names and assertions before granting individual AC credit.
+A successful workflow does not identify branch protection requirements or
+demonstrate that local-only test patches executed. Keep SIT and release
+decisions pending their separate evidence.
