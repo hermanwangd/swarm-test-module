@@ -425,6 +425,7 @@ def native_tox(args):
 
 def native_maven(args):
     """Run a reviewed Maven CI invocation once, mapping Surefire results to AC."""
+    import shutil
     import tempfile
     import xml.etree.ElementTree as ET
 
@@ -476,9 +477,14 @@ def native_maven(args):
             matches = observed.get((case["class"], case["method"]), [])
             states = {status for status, _, _ in matches}
             status = "FAIL" if "FAIL" in states else "PASS" if states == {"PASS"} else "BLOCKED"
-            evidence = [{"file": str(xml.relative_to(checkout)), "sha256": sha(xml),
-                         "class": node.get("classname"), "method": node.get("name"), "status": state}
-                        for state, xml, node in matches]
+            evidence = []
+            for state, xml, node in matches:
+                destination = output / "evidence" / xml.relative_to(checkout)
+                if not destination.exists():
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(xml, destination)
+                evidence.append({"file": str(destination.relative_to(output)), "sha256": sha(destination),
+                                 "class": node.get("classname"), "method": node.get("name"), "status": state})
             report["runs"].append(dict(case, status=status, junit=evidence))
         for ac in inventory:
             statuses = [r["status"] for r in report["runs"] if ac in r["requirements"]]
