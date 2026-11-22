@@ -1,4 +1,6 @@
-# Swarm product testing module
+# Swarm QA Module
+
+ENGCIM assigns a PR to its QA agent. The agent uses the project-test skill to trace requirements, identify missing cases and write the Framework DSL with expected results. The QA Module coordinates review, execution and reporting. The Test Framework runs the reviewed DSL and records assertion results. The published Java artifact is `swarm-product-test`.
 
 To **read a project's BDD, AC, PR and code, design test cases and execute them**,
 install the [project-test agent skill](skills/project-test/SKILL.md). It directs
