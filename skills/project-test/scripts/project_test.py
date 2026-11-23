@@ -81,6 +81,7 @@ def git(repo, *args):
 
 
 def collect(repo, revision, base, sources, output, pr_snapshot=None):
+    # Existing tests are a first-class baseline source when present.
     require(re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", revision) is not None, "revision must be an exact commit")
     require(re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", base) is not None, "base must be an exact commit")
     for commit in [revision, base]:
@@ -98,14 +99,26 @@ def collect(repo, revision, base, sources, output, pr_snapshot=None):
         records.append({"id": identity, "kind": kind, "origin": origin, "snapshot": snapshot,
                         "sha256": hashlib.sha256(data).hexdigest(), "lines": len(lines)})
         payloads.append((snapshot, data))
+    historical_commits = set()
     for kind, paths in sources.items():
-        require(kind in {"bdd", "ac", "pr", "code"}, "unknown source kind")
-        for name in paths:
+        require(kind in {"bdd", "ac", "pr", "code", "test", "historical-test"}, "unknown source kind")
+        for reference in paths:
+            commit, name = revision, reference
+            if kind == "historical-test":
+                commit, separator, name = reference.partition(":")
+                require(separator and re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", commit),
+                        "historical test requires a full commit and path")
+                if commit not in historical_commits:
+                    require(git(repo, "rev-parse", commit + "^{commit}").decode().strip() == commit,
+                            "historical test must reference a commit")
+                    git(repo, "merge-base", "--is-ancestor", commit, revision)
+                    historical_commits.add(commit)
             relative(name)
-            entry = git(repo, "ls-tree", "-z", revision, "--", name).decode().split("\t", 1)
+            entry = git(repo, "--literal-pathspecs", "ls-tree", "-z", commit, "--", name).decode().split("\t", 1)
             require(len(entry) == 2 and entry[0].split()[0] in {"100644", "100755"}
                     and entry[1] == name + "\x00", "source must be one committed regular file")
-            add(kind + ":" + name, kind, git(repo, "show", revision + ":" + name), revision + ":" + name)
+            origin = commit + ":" + name
+            add(kind + ":" + reference, kind, git(repo, "show", origin), origin)
     if pr_snapshot:
         pr = read(pr_snapshot)
         require(pr["head"] == revision and pr["base"] == base, "PR snapshot does not match source commits")
@@ -126,9 +139,23 @@ def collect(repo, revision, base, sources, output, pr_snapshot=None):
     return context
 
 
+def test_inventory_data(context_dir, sources, design):
+    inventory = design.get("test_inventory")
+    require(isinstance(inventory, dict), "checked-in test inventory is required")
+    inventory_path = relative(inventory.get("path"))
+    inventory_source = sources.get("test:" + inventory_path)
+    require(inventory_source is not None, "test inventory must be collected from the pinned checkout")
+    require(inventory.get("sha256") == inventory_source["sha256"], "test inventory digest mismatch")
+    inventory_data = read(contained(context_dir, inventory_source["snapshot"]))
+    require(inventory_data.get("schema") == "project-test-inventory.v1", "unsupported test inventory schema")
+    entries = inventory_data.get("entries")
+    require(isinstance(entries, list) and 0 < len(entries) <= 1024, "test inventory entries are required")
+    return entries
+
+
 def check(context_dir, design_path):
     context, design = read(context_dir / "context.json"), read(design_path)
-    require(context["schema"] == "project-test-context.v1" and design["schema"] == "project-test-design.v1",
+    require(context["schema"] == "project-test-context.v1" and design["schema"] == "project-test-design.v2",
             "unsupported workflow schema")
     require(design["context_sha256"] == sha(context_dir / "context.json"), "design uses another context")
     sources = {s["id"]: s for s in context["sources"]}
@@ -137,33 +164,88 @@ def check(context_dir, design_path):
         path = contained(context_dir, source["snapshot"])
         require(sha(path) == source["sha256"], "source snapshot changed")
         require(len(content(path).decode("utf-8").splitlines()) == source["lines"], "source line count changed")
-    def citations(items):
+    def citations(items, *, in_scope=True):
         require(isinstance(items, list) and 0 < len(items) <= 128, "missing citations")
-        kinds = set()
+        references = set()
         for item in items:
-            require(item["source"] in sources, "unknown citation source")
-            source = sources[item["source"]]
-            require(type(item["start"]) is int and type(item["end"]) is int
-                    and 1 <= item["start"] <= item["end"] <= source["lines"], "citation line range invalid")
-            kinds.add(source["kind"])
-        return kinds
+            require(isinstance(item, dict) and isinstance(item.get("source"), str) and item["source"].strip(),
+                    "invalid citation source")
+            require(type(item.get("start")) is int and type(item.get("end")) is int
+                    and 1 <= item["start"] <= item["end"], "citation line range invalid")
+            ref = item["source"]
+            if in_scope:
+                require(ref in sources, "unknown citation source: " + ref)
+                require(item["end"] <= sources[ref]["lines"], "citation line range invalid")
+            references.add(ref)
+        return references
     require(isinstance(design.get("author"), str) and design["author"].strip(), "missing design author")
     requirements = design["requirements"]
     require(0 < len(requirements) <= 512, "requirements inventory is required")
     ids = [r["id"] for r in requirements]
     require(all(isinstance(x, str) and x.strip() for x in ids) and len(ids) == len(set(ids)), "invalid requirement IDs")
+    ac_scope = set(ids)
     for requirement in requirements:
-        require("ac" in citations(requirement["citations"]), "requirement must cite AC")
-    cases, covered, case_ids, suites = design["cases"], set(), set(), set()
+        require(any(sources[ref]["kind"] == "ac" for ref in citations(requirement.get("citations"))),
+                "requirement must cite AC")
+    entries = test_inventory_data(context_dir, sources, design)
+    selected = None
+    if "inventory_scope" in design:
+        scope = design["inventory_scope"]
+        require(isinstance(scope, list) and all(isinstance(item, str) for item in scope)
+                and len(scope) == len(set(scope)), "inventory_scope requires a list of distinct inventory IDs")
+        selected = set(scope)
+    inventory_ids = set()
+    active_entries, active_acs = {}, set()
+    for entry in entries:
+        require(isinstance(entry, dict), "test inventory entry must be an object")
+        case_id = entry.get("id")
+        require(isinstance(case_id, str)
+                and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", case_id) is not None
+                and case_id not in inventory_ids, "duplicate or invalid test inventory ID")
+        inventory_ids.add(case_id)
+        action = entry.get("action")
+        require(action in {"reuse", "update", "add", "retire"},
+                "test inventory action must be reuse, update, add or retire")
+        entry_path = relative(entry.get("path"))
+        entry_requirements = entry.get("requirements")
+        require(isinstance(entry_requirements, list)
+                and all(isinstance(item, str) and item.strip() for item in entry_requirements)
+                and len(entry_requirements) == len(set(entry_requirements)), "invalid test inventory requirements")
+        reason = entry.get("reason")
+        require(isinstance(reason, str) and reason.strip(), "test inventory decision requires a reason")
+        in_scope = selected is None or case_id in selected
+        refs = citations(entry.get("citations"), in_scope=in_scope)
+        own_path = "test:" + entry_path
+        if action == "retire":
+            historical_path = r"historical-test:(?:[0-9a-f]{40}|[0-9a-f]{64}):" + re.escape(entry_path)
+            require(own_path in refs or any(re.fullmatch(historical_path, ref) for ref in refs),
+                    "retired test must cite its own current or historical test path")
+        else:
+            require(own_path in refs, "active test must cite its own checked-in test path")
+            require(entry_requirements, "active test inventory entry must map to at least one AC")
+            if in_scope:
+                mapped = ac_scope.intersection(entry_requirements)
+                active_entries[case_id] = (own_path, mapped)
+                active_acs.update(mapped)
+    require(selected is None or selected <= inventory_ids, "inventory_scope contains an unknown test inventory ID")
+    cases, case_ids, suites = design["cases"], set(), set()
     require(len(cases) <= 512, "too many cases")
     for case in cases:
         require(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", case["id"]) is not None, "invalid case ID")
         require(case["id"] not in case_ids and case["suite"] not in suites, "duplicate case or suite")
         case_ids.add(case["id"])
         suites.add(relative(case["suite"]))
-        require(case["requirements"] and set(case["requirements"]) <= set(ids), "case has unknown requirement")
-        covered.update(case["requirements"])
-        require({"bdd", "pr", "code"} <= citations(case["citations"]), "case must cite bdd, pr and code")
+        require(case["id"] in inventory_ids, "case is not registered in the checked-in test inventory")
+        require(case["id"] in active_entries, "case must use an active in-scope test inventory entry")
+        own_path, mapped = active_entries[case["id"]]
+        case_acs = case["requirements"]
+        require(isinstance(case_acs, list) and case_acs and all(isinstance(ac, str) and ac in ac_scope for ac in case_acs),
+                "case has unknown requirement")
+        require(len(case_acs) == len(mapped) and set(case_acs) == mapped, "case ACs differ from its inventory mapping")
+        refs = citations(case["citations"])
+        case_kinds = {sources[ref]["kind"] for ref in refs}
+        require({"bdd", "pr", "code"} <= case_kinds, "case must cite bdd, pr and code")
+        require(own_path in refs, "case must cite its own checked-in test path")
         require(case["technique"] in {"equivalence", "boundary", "state", "scenario", "regression"}, "unknown technique")
         for key in ["rationale", "expected", "test_case_id"]:
             require(isinstance(case.get(key), str) and case[key].strip(), "case missing " + key)
@@ -171,9 +253,9 @@ def check(context_dir, design_path):
             require(isinstance(case.get(key), list) and case[key] and all(isinstance(x, str) and x.strip()
                     for x in case[key]), "case missing " + key)
     for requirement in requirements:
-        if requirement["id"] not in covered:
+        if requirement["id"] not in active_acs:
             require(isinstance(requirement.get("gap"), str) and requirement["gap"].strip(),
-                    requirement["id"] + " uncovered without an explanation")
+                    requirement["id"] + " has no active checked-in test in scope and no explanation")
     return context, design
 
 
@@ -221,6 +303,194 @@ def coverage(design, results):
         rows.append({"requirement": requirement["id"], "status": status, "cases": cases,
                      "gap": requirement.get("gap"), "citations": requirement["citations"]})
     return rows
+
+
+def status_counts(items, field="status"):
+    counts = {"total": len(items), "passed": 0, "failed": 0, "blocked": 0, "untested": 0}
+    for item in items:
+        status = str(item.get(field, "BLOCKED")).lower()
+        if status == "pass":
+            counts["passed"] += 1
+        elif status == "fail":
+            counts["failed"] += 1
+        elif status == "untested":
+            counts["untested"] += 1
+        else:
+            counts["blocked"] += 1
+    return counts
+
+
+def inventory_summary(entries):
+    counts = {"total": len(entries), "reuse": 0, "update": 0, "add": 0, "retire": 0}
+    for entry in entries:
+        action = entry.get("action")
+        if action in counts:
+            counts[action] += 1
+    return counts
+
+
+def failure_details(canonical):
+    failure = canonical.get("failure") or {}
+    product_test = canonical.get("product_test") or {}
+    return {
+        "failure_code": failure.get("code"),
+        "failure_classification": failure.get("classification"),
+        "failure_reason": failure.get("reason"),
+        "owner_action": failure.get("owner_action"),
+        "observed_steps": canonical.get("step_results", []),
+        "verify_results": canonical.get("verify_results", []),
+        "run_id": canonical.get("run_id"),
+        "repository_revisions": product_test.get("repository_revisions", {}),
+        "evidence_refs": canonical.get("evidence_refs", []),
+    }
+
+
+def coder_handoff(cases):
+    failed = [case for case in cases if case.get("status") == "FAIL"]
+    if not failed:
+        return {"required": False, "assignee": None, "root_cause": "not_applicable", "cases": []}
+    handoff_cases = []
+    for case in failed:
+        evidence = {key: case[key] for key in
+                    ("receipt_sha256", "junit", "junit_sha256", "log", "log_sha256") if key in case}
+        if "receipt_sha256" in evidence:
+            evidence["validated"] = case.get("evidence_validation") == "validated"
+        handoff_cases.append({
+            "id": case.get("id"),
+            "expected": case.get("expected"),
+            "reason": case.get("reason"),
+            "failure_code": case.get("failure_code"),
+            "failure_classification": case.get("failure_classification"),
+            "failure_reason": case.get("failure_reason"),
+            "owner_action": case.get("owner_action"),
+            "receipt": case.get("receipt"),
+            "result": case.get("result"),
+            "observed_steps": case.get("observed_steps"),
+            "verify_results": case.get("verify_results"),
+            "run_id": case.get("run_id"),
+            "repository_revisions": case.get("repository_revisions"),
+            "evidence_refs": case.get("evidence_refs"),
+            "evidence": evidence,
+        })
+    return {
+        "required": True,
+        "assignee": "coder",
+        "root_cause": "product_or_test_oracle_needs_triage",
+        "summary": "Reviewed test execution failed; a coder must compare expected and actual evidence before changing product code or requesting oracle correction.",
+        "tasks": [
+            "Reproduce the failing case from the linked receipt and canonical result",
+            "Compare the reviewed expected result with the actual observation",
+            "Fix the product defect or request independent oracle correction",
+            "Rerun from a fresh output directory after the fix and review",
+        ],
+        "cases": handoff_cases,
+    }
+
+
+def report_summary(cases, requirements, inventory_entries, code_coverage=None, status="INCOMPLETE"):
+    return {
+        "status": status,
+        "cases": status_counts(cases),
+        "requirements": status_counts(requirements),
+        "test_inventory": inventory_summary(inventory_entries),
+        "code_coverage": code_coverage or {"status": "NOT_COLLECTED"},
+        "coder_handoff": coder_handoff(cases),
+    }
+
+
+def markdown_summary(summary):
+    lines = [
+        "# Test report summary",
+        "",
+        f"- Overall status: **{summary['status']}**",
+        f"- Coder handoff required: **{'yes' if summary['coder_handoff']['required'] else 'no'}**",
+        "",
+        "## Results",
+        "",
+        "| Scope | Total | PASS | FAIL | BLOCKED | UNTESTED |\n| --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for label, key in (("Test cases", "cases"), ("Requirements", "requirements")):
+        row = summary[key]
+        lines.append(f"| {label} | {row['total']} | {row['passed']} | {row['failed']} | {row['blocked']} | {row['untested']} |")
+    inventory = summary["test_inventory"]
+    lines.extend([
+        "",
+        "## Checked-in test inventory",
+        "",
+        "| Total | Reuse | Update | Add | Retire |",
+        "| ---: | ---: | ---: | ---: | ---: |",
+        f"| {inventory['total']} | {inventory['reuse']} | {inventory['update']} | {inventory['add']} | {inventory['retire']} |",
+        "",
+        "## Code coverage",
+        "",
+    ])
+    coverage = summary["code_coverage"]
+    lines.append(f"- Status: `{coverage['status']}`")
+    for key in ("lines", "branches"):
+        if key in coverage:
+            value = coverage[key]
+            lines.append(f"- {key.capitalize()}: **{value['covered']} / {value['total']}**")
+    for key, label in (("LINE", "Lines"), ("BRANCH", "Branches")):
+        if key in coverage:
+            value = coverage[key]
+            lines.append(f"- {label}: **{value['covered']} / {value['covered'] + value['missed']}**")
+    handoff = summary["coder_handoff"]
+    if handoff["required"]:
+        lines.extend([
+            "",
+            "## Coder handoff",
+            "",
+            f"- Assignee: **{handoff['assignee']}**",
+            f"- Root cause: `{handoff['root_cause']}`",
+            f"- {handoff['summary']}",
+            "",
+        ])
+        for case in handoff["cases"]:
+            lines.append(f"### {case['id']}")
+            if case.get("expected") is not None:
+                lines.append(f"- Expected: {case['expected']}")
+            if case.get("reason") is not None:
+                lines.append(f"- Reason: {case['reason']}")
+            if case.get("failure_code") is not None:
+                lines.append(f"- Failure code: `{case['failure_code']}`")
+            if case.get("failure_classification") is not None:
+                lines.append(f"- Failure classification: `{case['failure_classification']}`")
+            if case.get("failure_reason") is not None:
+                lines.append(f"- Failure reason: {case['failure_reason']}")
+            if case.get("owner_action") is not None:
+                lines.append(f"- Owner action: {case['owner_action']}")
+            if case.get("run_id") is not None:
+                lines.append(f"- Run ID: `{case['run_id']}`")
+            if case.get("repository_revisions") is not None:
+                lines.append(f"- Repository revisions: `{case['repository_revisions']}`")
+            if case.get("observed_steps") is not None:
+                lines.append(f"- Observed steps: `{case['observed_steps']}`")
+            if case.get("verify_results") is not None:
+                lines.append(f"- Verify results: `{case['verify_results']}`")
+            if case.get("evidence_refs") is not None:
+                lines.append(f"- Evidence refs: `{case['evidence_refs']}`")
+            if case.get("receipt") is not None:
+                lines.append(f"- Receipt: `{case['receipt']}`")
+            if case.get("result") is not None:
+                lines.append(f"- Result: `{case['result']['path']}` (SHA-256 `{case['result']['sha256']}`)")
+            evidence = case["evidence"]
+            if "receipt_sha256" in evidence:
+                lines.append(f"- Receipt SHA-256: `{evidence['receipt_sha256']}`")
+            if isinstance(evidence.get("junit"), list):
+                for item in evidence["junit"]:
+                    lines.append(f"- JUnit: `{item['file']}` (SHA-256 `{item['sha256']}`)")
+            elif "junit" in evidence:
+                lines.append(f"- JUnit: `{evidence['junit']}` (SHA-256 `{evidence['junit_sha256']}`)")
+            if "log" in evidence:
+                lines.append(f"- Log: `{evidence['log']}` (SHA-256 `{evidence['log_sha256']}`)")
+        lines.extend(["", "Tasks:"])
+        lines.extend(f"- {task}" for task in handoff["tasks"])
+    return "\n".join(lines) + "\n"
+
+
+def write_report(output, report):
+    write(output / "report.json", report)
+    (output / "summary.md").write_text(markdown_summary(report["summary"]), encoding="utf-8")
 
 
 def run(context_dir, design_path, review_path, review_pin, output):
@@ -300,7 +570,8 @@ def run(context_dir, design_path, review_path, review_pin, output):
             stable_inputs()
             receipt = read(work / "receipt.json")
             record.update(exit_code=completed.returncode, outcome=receipt["outcome"], verdict=receipt["framework_verdict"],
-                          receipt=str(work / "receipt.json"), receipt_sha256=sha(work / "receipt.json"))
+                          receipt=str(work / "receipt.json"), receipt_sha256=sha(work / "receipt.json"),
+                          evidence_validation=receipt["evidence_validation"])
             require(receipt["request"] == request, "receipt belongs to another request")
             require(receipt["outcome"] == "COMPLETED" and receipt["evidence_validation"] == "validated", "no validated execution")
             require(receipt["release_evidence_eligible"] is False and
@@ -310,6 +581,9 @@ def run(context_dir, design_path, review_path, review_pin, output):
                 path = regular(artifact["path"])
                 require(path.resolve().is_relative_to((work / "outputs").resolve()), "evidence outside this invocation")
                 require(sha(path) == artifact["sha256"], "evidence digest mismatch")
+            if receipt["framework_verdict"] == "failed":
+                canonical = read(receipt["artifacts"]["result"]["path"])
+                record.update(failure_details(canonical))
             if receipt["framework_verdict"] == "passed" and completed.returncode == 0:
                 record["status"] = "PASS"
             elif receipt["framework_verdict"] == "failed" and completed.returncode == 1:
@@ -321,15 +595,18 @@ def run(context_dir, design_path, review_path, review_pin, output):
         # Keep completed case evidence even if a later invocation is interrupted.
         write(output / "progress.json", results)
     rows = coverage(design, results)
+    inventory_entries = test_inventory_data(context_dir, {source["id"]: source for source in context["sources"]}, design)
     report = {"schema": "project-test-report.v1", "revision": context["revision"], "review_sha256": review_pin,
               "claim": "AGENT_AUTHORED_LOCAL_FRAMEWORK_EXECUTION", "release_eligible": False,
-              "cases": results, "requirements": rows, "status": "PASS" if all(r["status"] == "PASS" for r in rows) else "INCOMPLETE",
+              "cases": results, "requirements": rows, "test_inventory": design["test_inventory"],
+              "status": "PASS" if all(r["status"] == "PASS" for r in rows) else "INCOMPLETE",
               "coverage_note": "Coverage of the reviewed AC inventory; not code coverage or proof that the inventory is exhaustive."}
+    report["summary"] = report_summary(results, rows, inventory_entries, status=report["status"])
     product = next((source["origin"] for source in context["sources"] if source["id"] == "pr:snapshot"),
                    context.get("product"))
     record_local_execution(report, product, [row["requirement"] for row in rows], "framework case receipts",
                            design.get("stage_applicability"))
-    write(output / "report.json", report)
+    write_report(output, report)
     return report
 
 
@@ -381,11 +658,23 @@ def pytest_regression(args):
                        for key in ("tests", "errors", "failures", "skipped")}
     result["requirements"] = ac["requirements"]
     result["evidence_sha256"] = {name: sha(out / name) for name in ("coverage.json", "junit.xml", "pytest.log")}
-    if rc == 0 and result["tests"]["tests"] > result["tests"]["skipped"] and ac["status"] == "PASS":
+    cases = []
+    for node in suites.iter("testcase"):
+        outcome = next((tag for tag in ("failure", "error", "skipped") if node.find(tag) is not None), None)
+        status = "BLOCKED" if outcome == "skipped" else "FAIL" if outcome else "PASS"
+        case_id = "::".join(part for part in (node.get("classname"), node.get("name")) if part)
+        cases.append({"id": case_id, "status": status, "reason": outcome,
+                      "junit": "junit.xml", "junit_sha256": result["evidence_sha256"]["junit.xml"],
+                      "log": "pytest.log", "log_sha256": result["evidence_sha256"]["pytest.log"]})
+    if (rc == 0 and ac["status"] == "PASS" and any(case["status"] == "PASS" for case in cases)
+            and not any(case["status"] == "FAIL" for case in cases)):
         result["status"] = "PASS"
+    result["summary"] = report_summary(cases, ac["requirements"], [],
+                                       {"status": "COLLECTED", "lines": result["lines"], "branches": result["branches"]},
+                                       result["status"])
     record_local_execution(result, product, [row["requirement"] for row in ac["requirements"]],
                            "referenced AC report and local pytest JUnit/log/coverage", applicability)
-    write(out / "report.json", result)
+    write_report(out, result)
     print(json.dumps(result))
     return 0 if result["status"] == "PASS" else 1
 
@@ -445,6 +734,7 @@ def native_tox(args):
         with log.open("wb") as stream:
             rc = subprocess.run(argv, cwd=repo, env=env, stdout=stream, stderr=subprocess.STDOUT).returncode
         row = dict(case, exit_code=rc, log=log.name, log_sha256=sha(log), status="BLOCKED")
+        row.setdefault("id", selectors[0] if selectors else "regression")
         if xml.is_file():
             nodes = ET.parse(xml).getroot().findall(".//testcase")
             skipped = sum(node.find("skipped") is not None for node in nodes)
@@ -466,8 +756,9 @@ def native_tox(args):
     report["requirements"] = requirements
     if all(state == "PASS" for state in requirements.values()) and report["runs"][-1]["status"] == "PASS":
         report["status"] = "PASS"
+    report["summary"] = report_summary(report["runs"], [{"status": status} for status in requirements.values()], [], status=report["status"])
     record_local_execution(report, plan.get("pr") or checkout_identity(repo), inventory, "local tox JUnit and logs", plan.get("stage_applicability"))
-    write(output / "report.json", report)
+    write_report(output, report)
     return 0 if report["status"] == "PASS" else 1
 
 
@@ -521,6 +812,7 @@ def native_maven(args):
                 counts[status] += 1
                 key = (node.get("classname"), node.get("name"))
                 observed.setdefault(key, []).append((status, xml, node))
+        log_digest = sha(log)
         for case in plan["cases"]:
             matches = observed.get((case["class"], case["method"]), [])
             states = {status for status, _, _ in matches}
@@ -533,13 +825,15 @@ def native_maven(args):
                     shutil.copyfile(xml, destination)
                 evidence.append({"file": str(destination.relative_to(output)), "sha256": sha(destination),
                                  "class": node.get("classname"), "method": node.get("name"), "status": state})
-            report["runs"].append(dict(case, status=status, junit=evidence))
+            row = dict(case, status=status, junit=evidence, log=log.name, log_sha256=log_digest)
+            row.setdefault("id", f"{case['class']}::{case['method']}")
+            report["runs"].append(row)
         for ac in inventory:
             statuses = [r["status"] for r in report["runs"] if ac in r["requirements"]]
             report["requirements"][ac] = next((s for s in ("FAIL", "BLOCKED") if s in statuses),
                                                "PASS" if statuses else "UNTESTED")
         regression = "FAIL" if counts["FAIL"] else "PASS" if rc == 0 and counts["PASS"] else "BLOCKED"
-        report["regression"] = dict(counts, status=regression, exit_code=rc, log_sha256=sha(log))
+        report["regression"] = dict(counts, status=regression, exit_code=rc, log_sha256=log_digest)
         jacoco = checkout / "target/site/jacoco/jacoco.xml"
         if plan.get("coverage_goal") == "jacoco:report" and not jacoco.exists() and (checkout / "target/jacoco.exec").is_file():
             coverage_log = output / "coverage.log"
@@ -553,8 +847,10 @@ def native_maven(args):
                                   if c.get("type") in ("LINE", "BRANCH")}
         if regression == "PASS" and all(s == "PASS" for s in report["requirements"].values()):
             report["status"] = "PASS"
+    coverage_value = {"status": "COLLECTED", **report["coverage"]} if report.get("coverage") else {"status": "NOT_COLLECTED"}
+    report["summary"] = report_summary(report["runs"], [{"status": status} for status in report["requirements"].values()], [], coverage_value, report["status"])
     record_local_execution(report, plan.get("pr") or checkout_identity(args.repo), inventory, "local Maven log and Surefire XML", plan.get("stage_applicability"))
-    write(output / "report.json", report)
+    write_report(output, report)
     return 0 if report["status"] == "PASS" else 1
 
 
@@ -613,7 +909,7 @@ def main():
     acquire.add_argument("--repo", type=Path, required=True)
     for name in ["revision", "base"]:
         acquire.add_argument("--" + name, required=True)
-    for name in ["bdd", "ac", "pr", "code"]:
+    for name in ["bdd", "ac", "pr", "code", "test", "historical-test"]:
         acquire.add_argument("--" + name, action="append", default=[])
     acquire.add_argument("--pr-snapshot", type=Path)
     acquire.add_argument("--out", type=Path, required=True)
@@ -660,8 +956,9 @@ def main():
         if args.command == "pytest-regression":
             return pytest_regression(args)
         if args.command == "collect":
-            collect(args.repo, args.revision, args.base, {kind: getattr(args, kind) for kind in ["bdd", "ac", "pr", "code"]},
-                    args.out.absolute(), args.pr_snapshot)
+            sources = {kind: getattr(args, kind) for kind in ["bdd", "ac", "pr", "code", "test"]}
+            sources["historical-test"] = args.historical_test
+            collect(args.repo, args.revision, args.base, sources, args.out.absolute(), args.pr_snapshot)
             print(json.dumps({"context": str(args.out / "context.json"), "sha256": sha(args.out / "context.json")}))
         elif args.command == "check":
             _, design = check(args.context, args.design)

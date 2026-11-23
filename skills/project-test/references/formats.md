@@ -8,11 +8,20 @@ The agent creates these files; the user is not asked to fill in JSON.
 
 ```json
 {
-  "schema": "project-test-design.v1",
+  "schema": "project-test-design.v2",
   "author": "actual-qa-agent",
   "context_sha256": "sha256-of-context.json",
+  "test_inventory": {
+    "path": "tests/test-inventory.json",
+    "sha256": "sha256-of-the-checked-in-inventory"
+  },
+  "inventory_scope": ["TC-1", "LegacyDeploymentTest"],
   "requirements": [
-    {"id": "AC-1", "citations": [{"source": "ac:docs/AC.md", "start": 3, "end": 5}], "gap": null},
+    {
+      "id": "AC-1",
+      "citations": [{"source": "ac:docs/AC.md", "start": 3, "end": 5}],
+      "gap": null
+    },
     {"id": "AC-2", "citations": [{"source": "ac:docs/AC.md", "start": 7, "end": 8}], "gap": "Required service is unavailable"}
   ],
   "cases": [{
@@ -22,7 +31,8 @@ The agent creates these files; the user is not asked to fill in JSON.
     "citations": [
       {"source": "bdd:features/action.feature", "start": 1, "end": 8},
       {"source": "pr:snapshot", "start": 1, "end": 1},
-      {"source": "code:src/Action.java", "start": 1, "end": 12}
+      {"source": "code:src/Action.java", "start": 1, "end": 12},
+      {"source": "test:tests/ActionTest.java", "start": 20, "end": 44}
     ],
     "suite": "suites/minimum", "test_case_id": "TC-1"
   }]
@@ -30,10 +40,41 @@ The agent creates these files; the user is not asked to fill in JSON.
 ```
 
 Use actual source IDs/line ranges from `context.json`. Accepted techniques:
-`equivalence`, `boundary`, `state`, `scenario`, `regression`. Each case cites
-BDD/PR/code and maps to at least one AC. Each requirement cites its AC source.
-The independent reviewer verifies inventory completeness and semantic relevance;
-the helper cannot infer that a line citation justifies an assertion.
+`equivalence`, `boundary`, `state`, `scenario`, `regression`. Each case maps to
+at least one AC and cites BDD, PR, code and its own `test:<path>` source.
+Each requirement cites its AC source and must map to a selected active inventory
+entry or carry an explicit gap. A requirement with no designed Framework case
+is reported as UNTESTED.
+
+The checked-in test inventory is the durable baseline. Do not rebuild it from
+scratch for each task. Its entries use four actions:
+
+- `reuse`: an existing checked-in test remains sufficient.
+- `update`: an existing checked-in test is changed for the new requirement.
+- `add`: a new checked-in test is introduced.
+- `retire`: an obsolete checked-in test is removed from active coverage.
+
+Collect the complete head inventory as a `test:` source and pin its SHA-256.
+Every active entry records its project-wide AC mapping and cites its own
+`test:<path>`. A retirement records the reason and cites its own current or
+historical test. To collect an old path, pass `--historical-test <full-commit>:<path>`
+where the commit is reachable from the tested revision. Cite the resulting
+`historical-test:<full-commit>:<path>` source. A moved active case keeps its ID,
+uses its new path and may also cite the exact prior file.
+
+The optional design field `inventory_scope` selects the affected inventory IDs
+for this review. Omission selects every entry, preserving existing v2 designs.
+Collect the cited sources for the selected entries. Unselected rows retain their
+IDs, mappings and citation metadata without requiring a snapshot of each file.
+The checker validates inventory structure and ID uniqueness across the entire
+file. For selected rows it also verifies snapshot line ranges. Each executable
+case uses a selected active ID and maps to exactly the intersection of the
+entry's ACs and the design's ACs. Only executed cases can earn AC credit.
+Inventory action totals in the report count the entire pinned inventory.
+
+The independent reviewer verifies inventory completeness,
+semantic relevance and baseline decisions; the helper cannot infer that a line
+citation justifies an assertion.
 
 For each suite, its reviewed handoff must use the same AC IDs in
 `requirement_mapping[].requirement_ref`, the same `test_case_id`, the same source
@@ -67,6 +108,76 @@ such as `"reviewer": "someone"` alone proves no identity or approval.
 `run` exits 0 only when every inventoried AC has all assigned cases PASS. Exit 1
 means an incomplete report (failed/blocked/untested); exit 2 means invalid inputs
 or execution prevented before dispatch. `check` only validates a design.
+
+
+
+The checked-in inventory file has this shape:
+
+```json
+{
+  "schema": "project-test-inventory.v1",
+  "entries": [
+    {"id": "TC-1", "path": "tests/ActionTest.java",
+     "requirements": ["AC-1"], "action": "update",
+     "reason": "Extend the existing assertion for the boundary input",
+     "citations": [{"source": "test:tests/ActionTest.java", "start": 20, "end": 44}]},
+    {"id": "LegacyDeploymentTest", "path": "tests/LegacyDeploymentTest.java",
+     "requirements": ["AC-2"], "action": "retire",
+     "reason": "The deployment path was removed by the reviewed change",
+     "citations": [{"source": "historical-test:<full-ancestor-commit>:tests/LegacyDeploymentTest.java", "start": 1, "end": 30}]}
+  ]
+}
+```
+
+A complete report ties the AC inventory to executed results without promoting
+missing evidence:
+
+```json
+{
+  "schema": "project-test-report.v1",
+  "revision": "full-head-sha",
+  "review_sha256": "independent-review-pin",
+  "claim": "AGENT_AUTHORED_LOCAL_FRAMEWORK_EXECUTION",
+  "release_eligible": false,
+  "cases": [{"id": "TC-1", "status": "PASS"}],
+  "test_inventory": {
+    "path": "tests/test-inventory.json",
+    "sha256": "sha256-of-the-checked-in-inventory"
+  },
+  "requirements": [
+    {"requirement": "AC-1", "status": "PASS", "cases": ["TC-1"]},
+    {"requirement": "AC-2", "status": "UNTESTED", "cases": [], "gap": "Required service is unavailable"}
+  ],
+  "summary": {
+    "status": "INCOMPLETE",
+    "cases": {"total": 1, "passed": 1, "failed": 0, "blocked": 0, "untested": 0},
+    "requirements": {"total": 2, "passed": 1, "failed": 0, "blocked": 0, "untested": 1},
+    "test_inventory": {"total": 2, "reuse": 0, "update": 1, "add": 0, "retire": 1},
+    "code_coverage": {"status": "NOT_COLLECTED"},
+    "coder_handoff": {"required": false, "assignee": null, "root_cause": "not_applicable", "cases": []}
+  },
+  "status": "INCOMPLETE"
+}
+```
+
+Alongside `report.json`, each runner also writes `summary.md`, a human-readable
+version of the same status, case/AC counts, inventory actions, code coverage and
+coder handoff. The Markdown file is derived from the report; it does not replace
+machine-readable evidence.
+
+When a reviewed case FAILs, `summary.coder_handoff.required` is true. The handoff
+names the coder as the next owner, but marks the root cause as needing triage
+between product code and the reviewed oracle. It links the receipt/result evidence
+and asks for a fresh reviewed rerun after the fix. Failure entries also include the
+canonical failure code/classification/reason, owner action, run ID, repository
+revisions, observed steps, verify results and evidence references so the coder can
+reproduce and diagnose the failure instead of relying on a generic FAIL label.
+BLOCKED or UNTESTED cases do not become coder work unless a FAIL is present.
+
+A reused existing test still needs an execution record from the applicable native
+runner. A citation to an old test is not itself execution evidence. New or updated
+cases are reviewed before execution, then checked in so later tasks start from the
+updated inventory instead of recreating the baseline.
 
 ## Execution stages and evidence
 

@@ -27,25 +27,41 @@ class ProjectTest(unittest.TestCase):
         for name, content in {"behavior.feature": "Feature: command\nScenario: invalid command\nThen reject it\n",
                               "AC.md": "AC-1: reject unknown commands\nAC-2: require a deployment binding\n",
                               "PR.md": "Change: package the command as an executable JAR\n",
-                              "Main.java": "class Main {}\n"}.items():
+                              "Main.java": "class Main {}\n",
+                              "MainTest.java": "class MainTest { void rejectsUnknownCommand() {} }\n",
+                              "test-inventory.json": """{
+  \"schema\": \"project-test-inventory.v1\",
+  \"entries\": [
+    {\"id\": \"MainTest.rejectsUnknownCommand\", \"path\": \"MainTest.java\", \"requirements\": [\"AC-1\"],
+     \"action\": \"reuse\", \"reason\": \"Existing assertion covers the rejected-command behavior\",
+     \"citations\": [{\"source\": \"test:MainTest.java\", \"start\": 1, \"end\": 1}]},
+    {\"id\": \"TC-1\", \"path\": \"MainTest.java\", \"requirements\": [\"AC-1\"],
+     \"action\": \"update\", \"reason\": \"Framework case extends the checked-in assertion\",
+     \"citations\": [{\"source\": \"test:MainTest.java\", \"start\": 1, \"end\": 1}]}
+  ]
+}\n"""}.items():
             (self.repo / name).write_text(content)
         git("add", ".")
         git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "baseline")
         self.revision = git("rev-parse", "HEAD")
         self.context = self.root / "context"
         FLOW.collect(self.repo, self.revision, self.revision,
-                     {"bdd": ["behavior.feature"], "ac": ["AC.md"], "pr": ["PR.md"], "code": ["Main.java"]}, self.context)
+                     {"bdd": ["behavior.feature"], "ac": ["AC.md"], "pr": ["PR.md"], "code": ["Main.java"],
+                      "test": ["MainTest.java", "test-inventory.json"]}, self.context)
+        inventory_path = self.repo / "test-inventory.json"
         self.design = {
-            "schema": "project-test-design.v1", "author": "test-qa",
+            "schema": "project-test-design.v2", "author": "test-qa",
             "context_sha256": FLOW.sha(self.context / "context.json"),
             "requirements": [
                 {"id": "AC-1", "citations": [{"source": "ac:AC.md", "start": 1, "end": 1}], "gap": None},
                 {"id": "AC-2", "citations": [{"source": "ac:AC.md", "start": 2, "end": 2}], "gap": "No deployment available"}],
+            "test_inventory": {"path": "test-inventory.json", "sha256": FLOW.sha(inventory_path)},
             "cases": [{"id": "TC-1", "requirements": ["AC-1"], "technique": "equivalence",
                        "rationale": "Invalid command class", "preconditions": ["Executable JAR built"],
                        "steps": ["Invoke an unknown command"], "expected": "Reject with usage and exit 2",
                        "citations": [{"source": f"{kind}:{name}", "start": 1, "end": 1} for kind, name in
-                                     [("bdd", "behavior.feature"), ("pr", "PR.md"), ("code", "Main.java")]],
+                                     [("bdd", "behavior.feature"), ("pr", "PR.md"), ("code", "Main.java"),
+                                      ("test", "MainTest.java")]],
                        "suite": "suites/rejected-command", "test_case_id": "TC-1"}]}
 
     def save_design(self):
@@ -92,7 +108,7 @@ class ProjectTest(unittest.TestCase):
 
     def test_missing_ac_mapping_and_missing_gap_are_rejected(self):
         self.design["requirements"][1]["gap"] = None
-        with self.assertRaisesRegex(ValueError, "AC-2.*uncovered"):
+        with self.assertRaisesRegex(ValueError, "AC-2.*no active checked-in test"):
             FLOW.check(self.context, self.save_design())
         self.design["requirements"][1]["gap"] = "Not runnable"
         self.design["cases"][0]["requirements"] = ["invented"]
@@ -102,6 +118,37 @@ class ProjectTest(unittest.TestCase):
     def test_case_requires_bdd_pr_and_code_evidence(self):
         self.design["cases"][0]["citations"] = self.design["cases"][0]["citations"][:1]
         with self.assertRaisesRegex(ValueError, "bdd, pr and code"):
+            FLOW.check(self.context, self.save_design())
+
+
+    def test_checked_in_inventory_is_required_and_digest_pinned(self):
+        original = self.design.pop("test_inventory")
+        with self.assertRaisesRegex(ValueError, "test inventory"):
+            FLOW.check(self.context, self.save_design())
+        self.design["test_inventory"] = dict(original, sha256="0" * 64)
+        with self.assertRaisesRegex(ValueError, "digest"):
+            FLOW.check(self.context, self.save_design())
+
+    def test_inventory_reuse_requires_test_citation_and_cases_are_registered(self):
+        def replace_inventory(entries):
+            context = FLOW.read(self.context / "context.json")
+            source = next(item for item in context["sources"] if item["id"] == "test:test-inventory.json")
+            snapshot = self.context / source["snapshot"]
+            FLOW.write(snapshot, {"schema": "project-test-inventory.v1", "entries": entries})
+            source["sha256"] = FLOW.sha(snapshot)
+            source["lines"] = len(snapshot.read_text().splitlines())
+            FLOW.write(self.context / "context.json", context)
+            self.design["context_sha256"] = FLOW.sha(self.context / "context.json")
+            self.design["test_inventory"]["sha256"] = source["sha256"]
+        inventory = FLOW.read(self.repo / "test-inventory.json")
+        without_citation = [dict(entry) for entry in inventory["entries"]]
+        without_citation[0]["citations"] = []
+        replace_inventory(without_citation)
+        with self.assertRaisesRegex(ValueError, "citation"):
+            FLOW.check(self.context, self.save_design())
+
+        replace_inventory(inventory["entries"][:1])
+        with self.assertRaisesRegex(ValueError, "not registered"):
             FLOW.check(self.context, self.save_design())
 
     def test_report_never_counts_unexecuted_or_failed_requirements_as_pass(self):
@@ -114,6 +161,71 @@ class ProjectTest(unittest.TestCase):
         self.design["requirements"][0]["gap"] = "Only the local part ran; remote behavior is missing"
         report = FLOW.coverage(self.design, [{"id": "TC-1", "status": "PASS"}])
         self.assertEqual("BLOCKED", report[0]["status"])
+
+
+    def test_summary_counts_and_failed_case_coder_handoff(self):
+        inventory = FLOW.read(self.repo / "test-inventory.json")["entries"]
+        cases = [
+            {"id": "PASS-1", "status": "PASS"},
+            {"id": "FAIL-1", "status": "FAIL", "expected": "expected", "reason": "ASSERTION_FAILED",
+             "receipt": "receipt.json", "result": {"path": "result.json", "sha256": "a" * 64}, "receipt_sha256": "b" * 64},
+            {"id": "BLOCKED-1", "status": "BLOCKED"},
+        ]
+        requirements = [{"status": "PASS"}, {"status": "FAIL"}, {"status": "UNTESTED"}]
+        summary = FLOW.report_summary(cases, requirements, inventory,
+                                      {"status": "COLLECTED", "lines": {"covered": 1, "total": 2}}, "INCOMPLETE")
+        self.assertEqual({"total": 3, "passed": 1, "failed": 1, "blocked": 1, "untested": 0}, summary["cases"])
+        self.assertEqual({"total": 3, "passed": 1, "failed": 1, "blocked": 0, "untested": 1},
+                         summary["requirements"])
+        self.assertEqual({"total": 2, "reuse": 1, "update": 1, "add": 0, "retire": 0},
+                         summary["test_inventory"])
+        handoff = summary["coder_handoff"]
+        self.assertTrue(handoff["required"])
+        self.assertEqual("coder", handoff["assignee"])
+        self.assertEqual("product_or_test_oracle_needs_triage", handoff["root_cause"])
+        self.assertEqual(["FAIL-1"], [case["id"] for case in handoff["cases"]])
+
+    def test_failure_details_include_observed_evidence_and_owner_action(self):
+        canonical = {
+            "run_id": "RUN-1",
+            "product_test": {"repository_revisions": {"example/project": "a" * 40}},
+            "failure": {"code": "ASSERTION_FAILED", "classification": "VERIFICATION_FAILED",
+                        "reason": "Assertion `exit_code_matches` failed.", "owner_action": "Review assertion evidence."},
+            "step_results": [{"id": "invoke", "status": "passed", "outputs": {"exit_code": 2}}],
+            "verify_results": [{"id": "exit_code_matches", "status": "failed", "evidence_ref": "assertions/x.yaml"}],
+            "evidence_refs": ["assertions/x.yaml", "result.json"],
+        }
+        details = FLOW.failure_details(canonical)
+        self.assertEqual("ASSERTION_FAILED", details["failure_code"])
+        self.assertEqual("VERIFICATION_FAILED", details["failure_classification"])
+        self.assertEqual("Assertion `exit_code_matches` failed.", details["failure_reason"])
+        self.assertEqual("Review assertion evidence.", details["owner_action"])
+        self.assertEqual("RUN-1", details["run_id"])
+        self.assertEqual({"example/project": "a" * 40}, details["repository_revisions"])
+        self.assertEqual(2, details["observed_steps"][0]["outputs"]["exit_code"])
+        self.assertEqual("assertions/x.yaml", details["verify_results"][0]["evidence_ref"])
+        self.assertEqual(["assertions/x.yaml", "result.json"], details["evidence_refs"])
+
+    def test_blocked_without_failure_does_not_create_coder_handoff(self):
+        summary = FLOW.report_summary([{"id": "BLOCKED-1", "status": "BLOCKED"}],
+                                      [{"status": "BLOCKED"}], [], status="INCOMPLETE")
+        self.assertFalse(summary["coder_handoff"]["required"])
+        self.assertEqual("not_applicable", summary["coder_handoff"]["root_cause"])
+
+
+    def test_markdown_summary_is_human_readable_and_contains_coder_handoff(self):
+        inventory = FLOW.read(self.repo / "test-inventory.json")["entries"]
+        cases = [{"id": "FAIL-1", "status": "FAIL", "expected": "expected", "reason": "ASSERTION_FAILED",
+                  "receipt": "receipt.json", "result": {"path": "result.json", "sha256": "a" * 64},
+                  "receipt_sha256": "b" * 64}]
+        summary = FLOW.report_summary(cases, [{"status": "FAIL"}], inventory,
+                                      {"status": "COLLECTED", "lines": {"covered": 1, "total": 2}}, "INCOMPLETE")
+        markdown = FLOW.markdown_summary(summary)
+        for expected in ("# Test report summary", "Overall status: **INCOMPLETE**",
+                         "| Test cases | 1 | 0 | 1 | 0 | 0 |", "| Requirements | 1 | 0 | 1 | 0 | 0 |",
+                         "Coder handoff", "Assignee: **coder**", "product_or_test_oracle_needs_triage",
+                         "receipt.json", "Rerun from a fresh output directory after the fix and review"):
+            self.assertIn(expected, markdown)
 
     def test_pull_request_diff_excludes_base_branch_only_changes(self):
         original = self.revision
